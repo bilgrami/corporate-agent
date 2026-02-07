@@ -1,0 +1,115 @@
+# Default settings for genai-cli
+# Override at: ~/.genai-cli/settings.yaml (user) or .genai-cli/settings.yaml (project)
+
+# Agent identity (never appears in generated output)
+agent_name: "ai-assistant"
+
+# API configuration
+api_base_url: ""        # REQUIRED - set during 'genai auth login'
+web_ui_url: ""          # REQUIRED - set during 'genai auth login'
+
+# Defaults
+default_model: "gpt-5-chat-global"
+auto_apply: false
+streaming: true
+max_agent_rounds: 5
+create_backups: true
+
+# Token management
+token_warning_threshold: 0.80
+token_critical_threshold: 0.95
+
+# Session
+session_dir: "~/.genai-cli/sessions"
+max_saved_sessions: 50
+
+# Display
+show_token_count: true
+show_cost: true
+markdown_rendering: true
+color_theme: "auto"
+
+# Security
+allowed_write_paths:
+  - "."
+blocked_write_patterns:
+  - "**/.env"
+  - "**/*.pem"
+  - "**/*.key"
+  - "**/*.secret*"
+  - "**/credentials*"
+
+# File types for bundler
+file_types:
+  code:
+    extensions:
+      - .py
+      - .js
+      - .ts
+      - .tsx
+      - .java
+      - .go
+      - .rs
+      - .cpp
+      - .c
+      - .h
+      - .rb
+      - .sql
+      - .scala
+      - .kt
+      - .swift
+      - .r
+      - .cs
+    max_file_size_kb: 500
+
+  docs:
+    extensions:
+      - .md
+      - .txt
+      - .rst
+      - .yaml
+      - .yml
+      - .toml
+      - .json
+      - .xml
+      - .csv
+      - .cfg
+      - .ini
+      - .properties
+    max_file_size_kb: 500
+
+  scripts:
+    extensions:
+      - .sh
+      - .bash
+      - .zsh
+      - .ps1
+      - .bat
+      - .cmd
+    include_names:
+      - Makefile
+      - Dockerfile
+      - Jenkinsfile
+      - Vagrantfile
+    max_file_size_kb: 200
+
+  notebooks:
+    extensions:
+      - .ipynb
+    max_file_size_kb: 1000
+
+# Exclude patterns for file discovery
+exclude_patterns:
+  - "**/__pycache__/**"
+  - "**/.git/**"
+  - "**/node_modules/**"
+  - "**/.venv/**"
+  - "**/venv/**"
+  - "**/.env"
+  - "**/*.secret*"
+  - "**/*.pem"
+  - "**/*.key"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/.pytest_cache/**"
+  - "**/*.pyc"
