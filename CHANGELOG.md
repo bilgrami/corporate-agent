@@ -4,6 +4,44 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-07 | feat: Phase 2 — File bundler and upload integration
+
+### Summary
+Added file bundler that discovers, classifies, and bundles files by type
+(code/docs/scripts/notebooks) for separate upload to the API. Added
+`genai files` preview command and `--files` flag on `genai ask`.
+
+### Files Changed
+- `src/genai_cli/bundler.py` — New: FileBundler with classify, discover, bundle, notebook extraction, token estimation
+- `src/genai_cli/client.py` — Modified: added upload_bundles() for multi-type upload
+- `src/genai_cli/cli.py` — Modified: enhanced `ask` with file bundling/upload, added `files` preview command
+- `tests/test_bundler.py` — New: 35 tests for classify, discover, bundle, notebooks, tokens
+- `tests/test_streaming.py` — New: 10 tests for SSE parsing, fallback, connection error
+- `docs/implementation_plans/phase-02-bundler/agents.md` — Phase 2 agent doc
+
+### Rationale
+File context is essential for code review, bug fixing, and all AI-assisted
+coding tasks. Bundling per type matches the API's upload format (one PUT per type).
+
+### Behavior / Compatibility Implications
+- Files exceeding max_file_size_kb per type are silently skipped
+- Binary files auto-detected and excluded
+- Exclude patterns from settings.yaml honored
+- Notebook cells extracted via nbformat
+
+### Testing Recommendations
+- `genai files src/` to preview bundle contents
+- `genai ask "review" --files src/ --type code` for upload + chat
+- `make test` — 114 tests passing
+
+### Follow-ups
+- [ ] Interactive REPL with slash commands
+- [ ] Session persistence and token tracking
+- [ ] Response applier for automatic code changes
+- [ ] Skills system with SKILL.md support
+
+---
+
 ## 2026-02-07 | feat: Phase 1 — Project scaffolding, config, auth, API client
 
 ### Summary

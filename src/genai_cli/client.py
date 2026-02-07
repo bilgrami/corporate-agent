@@ -123,6 +123,19 @@ class GenAIClient:
         result: dict[str, Any] = self._handle_response(resp)
         return result
 
+    def upload_bundles(
+        self,
+        session_id: str,
+        bundles: list[Any],
+    ) -> list[dict[str, Any]]:
+        """Upload multiple file bundles (one PUT per type)."""
+        results: list[dict[str, Any]] = []
+        for bundle in bundles:
+            filename = f"{bundle.file_type}_bundle.txt"
+            result = self.upload_document(session_id, bundle.content, filename)
+            results.append(result)
+        return results
+
     def get_conversation_details(self, session_id: str) -> dict[str, Any]:
         """GET /api/v1/conversation/{id}/details."""
         client = self._get_client()

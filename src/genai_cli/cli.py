@@ -76,6 +76,8 @@ def ask(
     dry_run: bool,
 ) -> None:
     """Send a one-shot message to the AI."""
+    from genai_cli.bundler import FileBundler
+
     config: ConfigManager = ctx.obj["config"]
     display: Display = ctx.obj["display"]
     auth = AuthManager()
@@ -91,11 +93,32 @@ def ask(
     if model_info:
         display.print_info(f"Model: {model_info.display_name}")
 
+    # Bundle and upload files if provided
+    import uuid
+
+    session_id = str(uuid.uuid4())
+
+    if files:
+        bundler = FileBundler(config)
+        ft = file_type if file_type != "all" else None
+        bundles = bundler.bundle_files(list(files), file_type=ft)
+        for bundle in bundles:
+            display.print_bundle_summary(
+                bundle.file_type, bundle.file_count, bundle.estimated_tokens
+            )
+        if bundles:
+            try:
+                client.upload_bundles(session_id, bundles)
+                display.print_success("Files uploaded")
+            except Exception as e:
+                display.print_error(f"Upload failed: {e}")
+                sys.exit(1)
+
     use_streaming = not no_stream and config.settings.streaming
 
     try:
         full_text, chat_msg = stream_or_complete(
-            client, message, model_name, None, config, use_streaming
+            client, message, model_name, session_id, config, use_streaming
         )
     except AuthError as e:
         display.print_error(str(e))
@@ -311,6 +334,35 @@ def config_set(ctx: click.Context, key: str, value: str) -> None:
         yaml.dump(existing, f, default_flow_style=False)
 
     display.print_success(f"Set {key} = {existing[key]}")
+
+
+@main.command("files")
+@click.argument("paths", nargs=-1, required=True)
+@click.option(
+    "--type", "-t", "file_type", default="all",
+    help="File type filter: code|docs|scripts|notebooks|all",
+)
+@click.pass_context
+def files_cmd(ctx: click.Context, paths: tuple[str, ...], file_type: str) -> None:
+    """Preview files that would be bundled for upload."""
+    from genai_cli.bundler import FileBundler
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    bundler = FileBundler(config)
+    ft = file_type if file_type != "all" else None
+    bundles = bundler.bundle_files(list(paths), file_type=ft)
+
+    if not bundles:
+        display.print_warning("No files found matching criteria")
+        return
+
+    for bundle in bundles:
+        display.print_bundle_summary(
+            bundle.file_type, bundle.file_count, bundle.estimated_tokens
+        )
+        display.print_file_list(bundle.file_paths)
 
 
 if __name__ == "__main__":
