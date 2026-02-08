@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from collections.abc import Iterable
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from prompt_toolkit import PromptSession
@@ -44,7 +47,10 @@ class SlashCompleter(Completer):
         "/agent": "Enable agent mode",
         "/skill": "Invoke a skill",
         "/skills": "List available skills",
+        "/rewind": "Undo last N turns",
+        "/export": "Export session to file or clipboard",
         "/quit": "Save session and exit",
+        "/exit": "Exit the REPL (alias for /quit)",
         "/q": "Alias for /quit",
     }
 
@@ -221,7 +227,10 @@ class ReplSession:
             "/agent": lambda: self._handle_agent(arg),
             "/skill": lambda: self._handle_skill(arg),
             "/skills": self._handle_skills,
+            "/rewind": lambda: self._handle_rewind(arg),
+            "/export": lambda: self._handle_export(arg),
             "/quit": self._handle_quit,
+            "/exit": self._handle_quit,
             "/q": self._handle_quit,
         }
 
@@ -250,7 +259,10 @@ class ReplSession:
   /agent [rounds]    Enable agent mode for next message
   /skill <name>      Invoke a skill
   /skills            List available skills
-  /quit              Save session and exit"""
+  /rewind [n]        Undo last N turns (default: 1)
+  /export [file]     Export session to file or clipboard
+  /quit              Save session and exit
+  /exit              Alias for /quit"""
         self._display.print_info(help_text)
 
     def _handle_model(self, arg: str) -> None:
@@ -455,6 +467,103 @@ class ReplSession:
         for s in skills:
             desc = s.description.strip()[:60]
             self._display.print_info(f"  {s.name:25s} {desc}")
+
+    def _handle_rewind(self, arg: str) -> None:
+        """Rewind conversation by removing the last N turns."""
+        turns = 1
+        if arg:
+            if not arg.isdigit() or int(arg) < 1:
+                self._display.print_error(
+                    "Usage: /rewind [n]  (n = positive integer)"
+                )
+                return
+            turns = int(arg)
+
+        messages = self._session.get("messages", [])
+        to_remove = turns * 2  # each turn = user + assistant
+
+        if to_remove > len(messages):
+            available = len(messages) // 2
+            self._display.print_error(
+                f"Cannot rewind {turns} turn(s). Only {available} available."
+            )
+            return
+
+        removed = messages[-to_remove:]
+        total_tokens = sum(m.get("tokens_consumed", 0) for m in removed)
+        total_cost = sum(m.get("token_cost", 0.0) for m in removed)
+
+        self._session["messages"] = messages[:-to_remove]
+        self._token_tracker.subtract_consumed(total_tokens, total_cost)
+
+        self._display.print_success(
+            f"Rewound {turns} turn(s). Removed {total_tokens:,} tokens."
+        )
+
+    def _handle_export(self, arg: str) -> None:
+        """Export session to a markdown file or system clipboard."""
+        md = self._format_session_markdown()
+        if not md:
+            self._display.print_info("No messages to export.")
+            return
+
+        filename = arg.strip()
+        if filename:
+            Path(filename).write_text(md, encoding="utf-8")
+            self._display.print_info(f"Session exported to {filename}")
+        else:
+            if self._copy_to_clipboard(md):
+                self._display.print_info("Session copied to clipboard.")
+            else:
+                self._display.print_error(
+                    "Clipboard not available. Specify a filename: /export chat.md"
+                )
+
+    def _format_session_markdown(self) -> str:
+        """Format the current session messages as markdown."""
+        messages = self._session.get("messages", [])
+        if not messages:
+            return ""
+
+        model_info = self._config.get_model(self._model_name)
+        model_display = model_info.display_name if model_info else self._model_name
+        now = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+        lines = [
+            "# GenAI CLI Session Export",
+            f"**Date**: {now}",
+            f"**Model**: {model_display}",
+            f"**Messages**: {len(messages)}",
+            "",
+            "---",
+        ]
+
+        for msg in messages:
+            role = msg.get("role", "unknown").capitalize()
+            content = msg.get("content", "")
+            lines.append("")
+            lines.append(f"## {role}")
+            lines.append("")
+            lines.append(content)
+            lines.append("")
+            lines.append("---")
+
+        return "\n".join(lines) + "\n"
+
+    def _copy_to_clipboard(self, text: str) -> bool:
+        """Copy text to the system clipboard. Returns True on success."""
+        if sys.platform == "darwin":
+            cmd = ["pbcopy"]
+        elif sys.platform == "win32":
+            cmd = ["clip"]
+        else:
+            cmd = ["xclip", "-selection", "clipboard"]
+
+        try:
+            subprocess.run(cmd, input=text, text=True, check=True)  # noqa: S603
+            return True
+        except (FileNotFoundError, subprocess.SubprocessError):
+            return False
 
     def _handle_quit(self) -> None:
         """Save session and exit."""

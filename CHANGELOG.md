@@ -4,6 +4,53 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-07 | feat: /exit and /export commands for REPL
+
+### Summary
+Added `/exit` as an alias for `/quit` and `/export [filename]` to export the
+current conversation as markdown. When a filename is given the session is written
+to that file; otherwise the markdown is copied to the system clipboard.
+
+### Files Changed
+- `src/genai_cli/repl.py` — Added `/exit` alias, `_handle_export`, `_format_session_markdown`, `_copy_to_clipboard`; updated command dispatch, completer, and help text
+- `tests/test_repl.py` — 8 new tests for exit, export, completer entries
+
+### Rationale
+Claude CLI provides `/exit` and `/export` for convenience. `/exit` matches user
+expectation for exiting a REPL. `/export` enables saving or sharing conversations
+without manually copying terminal output.
+
+### Testing Recommendations
+- `make test` — all tests passing
+- In REPL: `/exit` saves session and exits
+- In REPL: `/export chat.md` writes markdown file
+- In REPL: `/export` copies to clipboard (macOS/Linux/Windows)
+
+---
+
+## 2026-02-07 | feat: /rewind command for REPL
+
+### Summary
+Added `/rewind [n]` slash command that removes the last N conversation turns
+(user + assistant message pairs) and adjusts token tracking accordingly.
+Defaults to 1 turn if no argument given.
+
+### Files Changed
+- `src/genai_cli/token_tracker.py` — Added `subtract_consumed()` method
+- `src/genai_cli/repl.py` — Added `/rewind` to completer, dispatch, help, and handler
+- `tests/test_token_tracker.py` — 2 tests for subtract (normal + clamp to zero)
+- `tests/test_repl.py` — 5 tests for rewind behavior
+
+### Rationale
+Previously the only options for a bad AI response were `/clear` (wipe entire session)
+or `/compact` (summarize). `/rewind` gives fine-grained undo without losing earlier context.
+
+### Testing Recommendations
+- `make test` — 287 tests passing, 81% coverage
+- In REPL: send a message, then `/rewind` to verify it's removed
+
+---
+
 ## 2026-02-07 | feat: Phase 6 — SEARCH/REPLACE block parser with error feedback
 
 ### Summary

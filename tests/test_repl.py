@@ -161,6 +161,51 @@ class TestReplCommands:
         # Should print usage
 
 
+class TestRewindCommand:
+    """Tests for /rewind command."""
+
+    def test_rewind_default(self, repl: ReplSession) -> None:
+        repl._session.setdefault("messages", []).extend([
+            {"role": "user", "content": "hello", "tokens_consumed": 10, "token_cost": 0.01},
+            {"role": "assistant", "content": "hi", "tokens_consumed": 20, "token_cost": 0.02},
+        ])
+        repl._token_tracker.add_consumed(30, 0.03)
+        repl._handle_command("/rewind")
+        assert len(repl._session["messages"]) == 0
+        assert repl._token_tracker.consumed == 0
+
+    def test_rewind_multiple_turns(self, repl: ReplSession) -> None:
+        msgs = repl._session.setdefault("messages", [])
+        for i in range(4):
+            role = "user" if i % 2 == 0 else "assistant"
+            msgs.append({"role": role, "content": f"msg{i}", "tokens_consumed": 100, "token_cost": 0.01})
+        repl._token_tracker.add_consumed(400, 0.04)
+        repl._handle_command("/rewind 1")
+        assert len(repl._session["messages"]) == 2
+        assert repl._token_tracker.consumed == 200
+
+    def test_rewind_too_many(self, repl: ReplSession) -> None:
+        repl._session.setdefault("messages", []).extend([
+            {"role": "user", "content": "hi", "tokens_consumed": 0, "token_cost": 0.0},
+            {"role": "assistant", "content": "hey", "tokens_consumed": 0, "token_cost": 0.0},
+        ])
+        repl._handle_command("/rewind 5")
+        assert len(repl._session["messages"]) == 2  # unchanged
+
+    def test_rewind_invalid_arg(self, repl: ReplSession) -> None:
+        repl._handle_command("/rewind abc")
+        # Should print error, not raise
+
+    def test_rewind_adjusts_tokens(self, repl: ReplSession) -> None:
+        repl._session.setdefault("messages", []).extend([
+            {"role": "user", "content": "q", "tokens_consumed": 50, "token_cost": 0.005},
+            {"role": "assistant", "content": "a", "tokens_consumed": 150, "token_cost": 0.015},
+        ])
+        repl._token_tracker.add_consumed(200, 0.02)
+        repl._handle_command("/rewind")
+        assert repl._token_tracker.consumed == 0
+
+
 class TestSlashCompleter:
     """Tests for slash command autocomplete."""
 
@@ -178,6 +223,7 @@ class TestSlashCompleter:
         results = self._complete(completer, "/")
         assert len(results) == len(SlashCompleter.COMMANDS)
         assert "/help" in results
+        assert "/rewind" in results
         assert "/quit" in results
 
     def test_partial_command(self, completer: SlashCompleter) -> None:
@@ -205,3 +251,90 @@ class TestSlashCompleter:
         assert len(completions) == 1
         assert completions[0].text == "/help"
         assert completions[0].display_meta is not None
+
+    def test_exit_in_completer(self, completer: SlashCompleter) -> None:
+        results = self._complete(completer, "/ex")
+        assert "/exit" in results
+        assert "/export" in results
+
+    def test_export_in_completer(self, completer: SlashCompleter) -> None:
+        results = self._complete(completer, "/export")
+        assert "/export" in results
+
+
+class TestExitCommand:
+    """Tests for /exit command (alias for /quit)."""
+
+    def test_exit_command_calls_quit(self, repl: ReplSession) -> None:
+        repl._running = True
+        repl._handle_command("/exit")
+        assert repl._running is False
+
+
+class TestExportCommand:
+    """Tests for /export command."""
+
+    def test_export_empty_session(self, repl: ReplSession, display: Display) -> None:
+        repl._handle_command("/export")
+        output = display.file.getvalue()  # type: ignore[union-attr]
+        assert "No messages to export" in output
+
+    def test_format_session_markdown(self, repl: ReplSession) -> None:
+        repl._session.setdefault("messages", []).extend([
+            {"role": "user", "content": "Hello there"},
+            {"role": "assistant", "content": "Hi! How can I help?"},
+        ])
+        md = repl._format_session_markdown()
+        assert "# GenAI CLI Session Export" in md
+        assert "**Messages**: 2" in md
+        assert "## User" in md
+        assert "Hello there" in md
+        assert "## Assistant" in md
+        assert "Hi! How can I help?" in md
+
+    def test_format_empty_returns_empty_string(self, repl: ReplSession) -> None:
+        md = repl._format_session_markdown()
+        assert md == ""
+
+    def test_export_to_file(
+        self, repl: ReplSession, tmp_path: Path
+    ) -> None:
+        repl._session.setdefault("messages", []).extend([
+            {"role": "user", "content": "test message"},
+            {"role": "assistant", "content": "test response"},
+        ])
+        out_file = tmp_path / "export.md"
+        repl._handle_command(f"/export {out_file}")
+        assert out_file.exists()
+        content = out_file.read_text(encoding="utf-8")
+        assert "# GenAI CLI Session Export" in content
+        assert "test message" in content
+        assert "test response" in content
+
+    def test_export_to_clipboard_success(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        repl._session.setdefault("messages", []).extend([
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ])
+        with patch("genai_cli.repl.subprocess.run") as mock_run:
+            repl._handle_command("/export")
+            mock_run.assert_called_once()
+            output = display.file.getvalue()  # type: ignore[union-attr]
+            assert "clipboard" in output.lower()
+
+    def test_export_to_clipboard_failure(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        repl._session.setdefault("messages", []).extend([
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ])
+        with patch(
+            "genai_cli.repl.subprocess.run",
+            side_effect=FileNotFoundError("no pbcopy"),
+        ):
+            repl._handle_command("/export")
+            output = display.file.getvalue()  # type: ignore[union-attr]
+            assert "not available" in output.lower() or "Specify a filename" in output
