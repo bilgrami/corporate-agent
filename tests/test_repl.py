@@ -276,7 +276,7 @@ class TestExportCommand:
 
     def test_export_empty_session(self, repl: ReplSession, display: Display) -> None:
         repl._handle_command("/export")
-        output = display.file.getvalue()  # type: ignore[union-attr]
+        output = display._file.getvalue()  # type: ignore[union-attr]
         assert "No messages to export" in output
 
     def test_format_session_markdown(self, repl: ReplSession) -> None:
@@ -321,7 +321,7 @@ class TestExportCommand:
         with patch("genai_cli.repl.subprocess.run") as mock_run:
             repl._handle_command("/export")
             mock_run.assert_called_once()
-            output = display.file.getvalue()  # type: ignore[union-attr]
+            output = display._file.getvalue()  # type: ignore[union-attr]
             assert "clipboard" in output.lower()
 
     def test_export_to_clipboard_failure(
@@ -336,5 +336,5 @@ class TestExportCommand:
             side_effect=FileNotFoundError("no pbcopy"),
         ):
             repl._handle_command("/export")
-            output = display.file.getvalue()  # type: ignore[union-attr]
+            output = display._file.getvalue()  # type: ignore[union-attr]
             assert "not available" in output.lower() or "Specify a filename" in output
