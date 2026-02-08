@@ -1,5 +1,11 @@
 # Agent Instructions
 
+## Commit and Changelog Rules
+
+- NEVER include "Co-Authored-By" lines in commit messages
+- NEVER mention Claude, Anthropic, or any AI tool name in commit messages or CHANGELOG.md
+- Commit messages should read as if written by a human developer
+
 ## Project Overview
 
 This is `genai-cli`, a Python CLI tool that wraps a corporate multi-model AI
