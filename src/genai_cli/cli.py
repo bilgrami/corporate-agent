@@ -382,5 +382,84 @@ def resume_cmd(ctx: click.Context, session_id: str) -> None:
     repl.run()
 
 
+@main.group("skill")
+@click.pass_context
+def skill_cmd(ctx: click.Context) -> None:
+    """Manage and invoke skills."""
+
+
+@skill_cmd.command("list")
+@click.pass_context
+def skill_list(ctx: click.Context) -> None:
+    """List all available skills."""
+    from genai_cli.skills.registry import SkillRegistry
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    registry = SkillRegistry(config)
+    skills = registry.list_skills()
+    if not skills:
+        display.print_warning("No skills found")
+        return
+
+    from rich.table import Table
+
+    table = Table(title="Available Skills")
+    table.add_column("Name", style="cyan")
+    table.add_column("Category")
+    table.add_column("Description")
+
+    for s in skills:
+        desc = s.description[:60] + "..." if len(s.description) > 60 else s.description
+        table.add_column if False else None  # type: ignore
+        table.add_row(s.name, s.category, desc.strip())
+
+    display._console.print(table)
+
+
+@skill_cmd.command("invoke")
+@click.argument("name")
+@click.option("--files", "-f", multiple=True, help="Files/directories to include")
+@click.option("--auto-apply", is_flag=True, help="Auto-apply changes")
+@click.option("--dry-run", is_flag=True, help="Preview without applying")
+@click.option("--max-rounds", default=5, help="Max agent rounds")
+@click.option("--message", "-m", default="", help="Additional message")
+@click.pass_context
+def skill_invoke(
+    ctx: click.Context,
+    name: str,
+    files: tuple[str, ...],
+    auto_apply: bool,
+    dry_run: bool,
+    max_rounds: int,
+    message: str,
+) -> None:
+    """Invoke a skill by name."""
+    from genai_cli.skills.executor import SkillExecutor
+    from genai_cli.skills.registry import SkillRegistry
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    registry = SkillRegistry(config)
+    executor = SkillExecutor(config, display, registry)
+
+    result = executor.execute(
+        name,
+        message=message,
+        files=list(files) if files else None,
+        auto_apply=auto_apply,
+        dry_run=dry_run,
+        max_rounds=max_rounds,
+    )
+
+    if result:
+        display.print_info(
+            f"\nSkill completed: {len(result.rounds)} rounds, "
+            f"{len(result.total_files_applied)} files modified"
+        )
+
+
 if __name__ == "__main__":
     main()

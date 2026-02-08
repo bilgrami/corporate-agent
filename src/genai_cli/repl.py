@@ -312,15 +312,43 @@ class ReplSession:
         )
 
     def _handle_skill(self, arg: str) -> None:
-        """Invoke a skill (placeholder)."""
+        """Invoke a skill."""
         if not arg:
             self._display.print_error("Usage: /skill <name>")
             return
-        self._display.print_info(f"Skill '{arg}' — coming in Phase 5")
+
+        from genai_cli.skills.executor import SkillExecutor
+        from genai_cli.skills.registry import SkillRegistry
+
+        registry = SkillRegistry(self._config)
+        executor = SkillExecutor(self._config, self._display, registry)
+
+        files = list(self._queued_files) if self._queued_files else None
+        self._queued_files.clear()
+
+        result = executor.execute(
+            arg,
+            files=files,
+            auto_apply=self._auto_apply,
+        )
+        if result:
+            self._display.print_info(
+                f"Skill completed: {len(result.rounds)} rounds"
+            )
 
     def _handle_skills(self) -> None:
-        """List available skills (placeholder)."""
-        self._display.print_info("Skills system — coming in Phase 5")
+        """List available skills."""
+        from genai_cli.skills.registry import SkillRegistry
+
+        registry = SkillRegistry(self._config)
+        skills = registry.list_skills()
+        if not skills:
+            self._display.print_info("No skills found.")
+            return
+        self._display.print_info("Available skills:")
+        for s in skills:
+            desc = s.description.strip()[:60]
+            self._display.print_info(f"  {s.name:25s} {desc}")
 
     def _handle_quit(self) -> None:
         """Save session and exit."""

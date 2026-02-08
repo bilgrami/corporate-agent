@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-07 | feat: Phase 5 — Skills system
+
+### Summary
+Added SKILL.md-based skills system with 14 bundled skills, 3-location discovery
+(project > user > bundled), progressive 3-tier loading, and full CLI/REPL integration.
+
+### Files Changed
+- `src/genai_cli/skills/__init__.py` — New: package exports
+- `src/genai_cli/skills/loader.py` — New: SkillLoader with YAML frontmatter, Tier 1/2/3 loading
+- `src/genai_cli/skills/registry.py` — New: SkillRegistry with 3-location discovery, agents.md walk-up
+- `src/genai_cli/skills/executor.py` — New: SkillExecutor assembles prompt and runs AgentLoop
+- `skills/` — 14 bundled SKILL.md files (review, fix, refactor, explain, test-gen, doc-gen, commit-msg, security-audit, systematic-debugging, test-driven-development, writing-plans, executing-plans, requesting-code-review, brainstorming)
+- `src/genai_cli/cli.py` — Modified: added `skill list` and `skill invoke` commands
+- `src/genai_cli/repl.py` — Modified: `/skill` and `/skills` now use real SkillRegistry/SkillExecutor
+- `pyproject.toml` — Modified: added pythonpath for pytest (Python 3.14 compatibility)
+- `tests/test_skill_loader.py` — 12 tests for frontmatter parsing, tiers, all 14 bundled skills
+- `tests/test_skill_registry.py` — 10 tests for discovery, priority, agents.md walk-up
+- `tests/test_skill_executor.py` — 6 tests for execution, prompt assembly, modes
+
+### Rationale
+Skills provide repeatable AI workflows with consistent prompts. The SKILL.md format
+is human-readable and extensible. Progressive loading keeps token usage low until
+a skill is actually invoked.
+
+### Behavior / Compatibility Implications
+- `genai skill list` shows all discovered skills
+- `genai skill invoke <name> --files src/` executes a skill
+- `/skills` and `/skill <name>` work in REPL
+- Custom skills in `.genai-cli/skills/` or `~/.genai-cli/skills/` override bundled
+
+### Testing Recommendations
+- `genai skill list` to verify all 14 skills discovered
+- `genai skill invoke review --files src/` to test execution
+- `make test` — 233 tests passing, 81% coverage
+
+### Follow-ups
+- [ ] Multi-agent parallel execution (Phase 6)
+- [ ] Shell completion for skill names
+- [ ] Skill parameter validation
+
+---
+
 ## 2026-02-07 | feat: Phase 4 — Response applier and agent loop
 
 ### Summary
