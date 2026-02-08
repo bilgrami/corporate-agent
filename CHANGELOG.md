@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-07 | fix+docs: Code cleanup and documentation improvements
+
+### Summary
+Removed dead code, unused imports, stale placeholder labels, duplicate config key,
+and orphan files. Rewrote README with full feature coverage (REPL, skills, agent mode,
+sessions, file handling). Added Architecture.md and CONTRIBUTING.md. Enhanced AGENTS.md
+with dependency graph and developer workflows.
+
+### Files Changed
+- `src/genai_cli/cli.py` -- Removed dead no-op statement in skill_list
+- `src/genai_cli/applier.py` -- Removed unused imports (difflib, os, Any) and dead hunk-parsing loop
+- `src/genai_cli/repl.py` -- Removed stale "(placeholder)" from skill help text
+- `config/models.yaml` -- Removed duplicate default_model key
+- `test_out.py` -- Deleted orphan debug file
+- `README.md` -- Full rewrite: prerequisites, REPL guide, 14 skills, agent mode, sessions, troubleshooting
+- `AGENTS.md` -- Enhanced: module dependency graph, skill development guide, dev workflows, test patterns
+- `docs/Architecture.md` -- New: component diagram, data flows, design decisions, security architecture
+- `docs/CONTRIBUTING.md` -- New: dev setup, testing conventions, feature guides, code style
+
+### Rationale
+The README was missing documentation for the primary interface (REPL), skills system,
+agent mode, and session management. Code contained dead code and stale labels from
+iterative development. Developer docs referenced by PRD did not exist.
+
+### Testing Recommendations
+- `make test` -- 233 tests passing, 81% coverage (unchanged)
+- Review README for accuracy against actual CLI commands
+
+---
+
 ## 2026-02-07 | feat: Phase 5 — Skills system
 
 ### Summary

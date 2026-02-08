@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import difflib
 import fnmatch
-import os
 import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from genai_cli.config import ConfigManager
 from genai_cli.display import Display
@@ -183,21 +180,6 @@ class FileApplier:
         original = path.read_text()
         original_lines = original.splitlines(keepends=True)
 
-        # Parse the diff hunks
-        new_lines = list(original_lines)
-        offset = 0
-
-        for line in diff_content.splitlines():
-            if line.startswith("@@"):
-                # Parse hunk header: @@ -start,count +start,count @@
-                hunk_match = re.match(
-                    r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", line
-                )
-                if hunk_match:
-                    offset = 0  # Reset for each hunk
-
-        # Fallback: try to apply as simple patch
-        # For now, use a simple line-by-line approach
         try:
             patched = self._simple_patch(original_lines, diff_content)
             path.write_text("".join(patched))

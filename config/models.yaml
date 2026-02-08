@@ -121,5 +121,3 @@ models:
     cost_per_1k_output: 0.0003
     supports_streaming: true
     supports_file_upload: true
-
-default_model: "gpt-5-chat-global"

@@ -142,8 +142,8 @@ class ReplSession:
   /config [k] [v]    View or update settings
   /auto-apply [on|off]  Toggle auto-apply mode
   /agent [rounds]    Enable agent mode for next message
-  /skill <name>      Invoke a skill (placeholder)
-  /skills            List available skills (placeholder)
+  /skill <name>      Invoke a skill
+  /skills            List available skills
   /quit              Save session and exit"""
         self._display.print_info(help_text)
 

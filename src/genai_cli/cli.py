@@ -412,7 +412,6 @@ def skill_list(ctx: click.Context) -> None:
 
     for s in skills:
         desc = s.description[:60] + "..." if len(s.description) > 60 else s.description
-        table.add_column if False else None  # type: ignore
         table.add_row(s.name, s.category, desc.strip())
 
     display._console.print(table)
