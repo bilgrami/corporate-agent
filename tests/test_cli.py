@@ -70,20 +70,18 @@ class TestCLI:
     def test_ask_no_stream(
         self, runner: CliRunner, mock_env: dict[str, str]
     ) -> None:
-        respx.post("https://api-genai.test.com/api/v1/chathistory/create").mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "SessionId": "s1",
-                    "Message": "Hello back!",
-                    "UserOrBot": "assistant",
-                    "TokensConsumed": 50,
-                    "TokenCost": 0.001,
-                    "ModelName": "gpt-5-chat-global",
-                    "DisplayName": "GPT-5",
-                    "TimestampUTC": "2026-02-07T12:00:00Z",
-                },
-            )
+        import json as _json
+        # Step 1: create session entry (GET)
+        respx.get("https://api-genai.test.com/api/v1/chathistory/create").mock(
+            return_value=httpx.Response(200, json={"status": "created"})
+        )
+        # Step 2: stream endpoint (POST) returns JSON-lines body
+        stream_body = "\n".join([
+            _json.dumps({"Task": "Intermediate", "Steps": [{"data": "Hello back!"}], "Message": "Hello back!"}),
+            _json.dumps({"Task": "Complete", "TokensConsumed": 50, "TokenCost": 0.001, "SessionId": "s1", "Steps": [], "Message": ""}),
+        ])
+        respx.post(url__regex=r".*/api/v1/conversation/.*/stream").mock(
+            return_value=httpx.Response(200, text=stream_body)
         )
         with patch.dict("os.environ", mock_env):
             result = runner.invoke(main, ["ask", "hello", "--no-stream"])

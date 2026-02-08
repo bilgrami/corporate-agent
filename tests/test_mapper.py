@@ -16,6 +16,24 @@ DEFAULT_FORMAT: dict = {
         "chat_create": "/api/v1/chathistory/create",
         "conversation": "/api/v1/chathistory/{session_id}",
         "document_upload": "/api/v1/conversation/{session_id}/document/upload",
+        "stream": "/api/v1/conversation/{session_id}/stream",
+    },
+    "endpoint_methods": {
+        "chat_create": "GET",
+        "stream": "POST",
+        "document_upload": "PUT",
+    },
+    "endpoint_content_types": {
+        "stream": "multipart/form-data",
+    },
+    "stream_request_fields": {
+        "message": "user_input",
+        "model_name": "model_name",
+    },
+    "stream_request_defaults": {
+        "web_search": "true",
+        "temperature": "0.5",
+        "premium": "false",
     },
     "request_fields": {
         "session_id": "SessionId",
@@ -234,6 +252,63 @@ class TestStreamSupport:
         assert mapper.stream_line_prefix == ""
         assert mapper.stream_done_signal == "[DONE]"
         assert mapper.stream_content_paths == ["Steps[0].data", "Message"]
+
+
+class TestEndpointMethod:
+    def test_configured_method(self, mapper: ResponseMapper) -> None:
+        assert mapper.endpoint_method("chat_create") == "GET"
+        assert mapper.endpoint_method("stream") == "POST"
+        assert mapper.endpoint_method("document_upload") == "PUT"
+
+    def test_default_method(self, mapper: ResponseMapper) -> None:
+        assert mapper.endpoint_method("usage") == "GET"
+        assert mapper.endpoint_method("nonexistent") == "GET"
+
+
+class TestEndpointContentType:
+    def test_configured_content_type(self, mapper: ResponseMapper) -> None:
+        assert mapper.endpoint_content_type("stream") == "multipart/form-data"
+
+    def test_default_content_type(self, mapper: ResponseMapper) -> None:
+        assert mapper.endpoint_content_type("chat_create") == "application/json"
+        assert mapper.endpoint_content_type("nonexistent") == "application/json"
+
+
+class TestBuildStreamPayload:
+    def test_maps_fields_and_merges_defaults(self, mapper: ResponseMapper) -> None:
+        payload = mapper.build_stream_payload(message="hello", model_name="gpt-5")
+        assert payload == {
+            "user_input": "hello",
+            "model_name": "gpt-5",
+            "web_search": "true",
+            "temperature": "0.5",
+            "premium": "false",
+        }
+
+    def test_overrides_defaults(self, mapper: ResponseMapper) -> None:
+        payload = mapper.build_stream_payload(
+            message="hi", model_name="gpt-5", temperature="0.9"
+        )
+        assert payload["temperature"] == "0.9"
+
+    def test_empty_kwargs(self, mapper: ResponseMapper) -> None:
+        payload = mapper.build_stream_payload()
+        assert payload == {
+            "web_search": "true",
+            "temperature": "0.5",
+            "premium": "false",
+        }
+
+    def test_no_config(self) -> None:
+        m = ResponseMapper({})
+        payload = m.build_stream_payload(message="hi")
+        assert payload == {"message": "hi"}
+
+
+class TestStreamEndpoint:
+    def test_stream_endpoint(self, mapper: ResponseMapper) -> None:
+        result = mapper.endpoint("stream", session_id="abc-123")
+        assert result == "/api/v1/conversation/abc-123/stream"
 
 
 class TestCustomFormat:

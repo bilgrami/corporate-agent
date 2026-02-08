@@ -54,6 +54,10 @@ class ResponseMapper:
         self._usage_fields = api_format.get("usage_fields", {})
         self._document_fields = api_format.get("document_fields", {})
         self._stream = api_format.get("stream", {})
+        self._endpoint_methods = api_format.get("endpoint_methods", {})
+        self._endpoint_content_types = api_format.get("endpoint_content_types", {})
+        self._stream_request_fields = api_format.get("stream_request_fields", {})
+        self._stream_request_defaults = api_format.get("stream_request_defaults", {})
 
     # ---- Endpoints ----
 
@@ -61,6 +65,22 @@ class ResponseMapper:
         """Get an endpoint path, formatting placeholders like {session_id}."""
         template = self._endpoints.get(name, "")
         return template.format(**kwargs) if kwargs else template
+
+    def endpoint_method(self, name: str) -> str:
+        """Return the HTTP method for an endpoint (default GET)."""
+        return self._endpoint_methods.get(name, "GET")
+
+    def endpoint_content_type(self, name: str) -> str:
+        """Return the content type for an endpoint (default application/json)."""
+        return self._endpoint_content_types.get(name, "application/json")
+
+    def build_stream_payload(self, **kwargs: str) -> dict[str, str]:
+        """Build stream request payload, mapping internal names to API names and merging defaults."""
+        payload = dict(self._stream_request_defaults)
+        for internal_name, value in kwargs.items():
+            api_name = self._stream_request_fields.get(internal_name, internal_name)
+            payload[api_name] = value
+        return payload
 
     # ---- Request building ----
 

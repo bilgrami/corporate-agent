@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-08 | fix: Configurable HTTP methods and multi-step request flows
+
+### Summary
+Made HTTP methods, content types, and request field mappings fully configurable
+per endpoint in `api_format.yaml`. The client now supports multi-step request
+flows (e.g. session creation followed by a separate streaming request) with
+per-endpoint method and content type overrides. Previously all write operations
+were hardcoded to POST with JSON bodies, which broke APIs that expect different
+methods or content types.
+
+### Files Changed
+- `config/api_format.yaml` — Added `endpoint_methods`, `endpoint_content_types`, `stream_request_fields`, `stream_request_defaults`, and stream endpoint
+- `src/genai_cli/mapper.py` — Added `endpoint_method()`, `endpoint_content_type()`, `build_stream_payload()`
+- `src/genai_cli/client.py` — `create_chat()` uses configurable HTTP method; `stream_chat()` uses two-step create + stream flow
+- `src/genai_cli/streaming.py` — Updated fallback path to use the same two-step flow; auth errors now propagate correctly
+- `tests/test_mapper.py` — Tests for new mapper methods
+- `tests/test_client.py` — Updated for configurable methods, added two-step flow test
+- `tests/test_streaming.py` — Updated fallback tests
+- `tests/test_agent.py` — Updated mocks for new stream-based flow
+- `tests/test_cli.py` — Updated integration test mocks
+
+### Rationale
+Different API platforms use different HTTP methods and content types for the
+same logical operations. Hardcoding POST/JSON made the client incompatible with
+APIs that require GET for session creation or multipart/form-data for message
+submission. All protocol details are now YAML-driven so a different platform
+can be supported without code changes.
+
+### Behavior / Compatibility Implications
+- Endpoint HTTP methods are now read from `endpoint_methods` config (default: GET)
+- `stream_chat()` performs two HTTP requests (session create + stream)
+- Non-streaming fallback uses the same two-step flow
+- Stream request fields are mapped through `stream_request_fields` config
+
+### Testing Recommendations
+- `make test` — 346 tests passing, 83% coverage
+- Verify streaming and non-streaming chat modes work end-to-end
+
+---
+
 ## 2026-02-07 | feat: YAML-driven ResponseMapper for API format decoupling
 
 ### Summary

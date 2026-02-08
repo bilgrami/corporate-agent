@@ -14,6 +14,17 @@ api_format:
     conversation: "/api/v1/chathistory/{session_id}"
     conversation_details: "/api/v1/conversation/{session_id}/details"
     document_upload: "/api/v1/conversation/{session_id}/document/upload"
+    stream: "/api/v1/conversation/{session_id}/stream"
+
+  # HTTP method per endpoint (default: GET for reads, POST for writes)
+  endpoint_methods:
+    chat_create: "GET"
+    stream: "POST"
+    document_upload: "PUT"
+
+  # Content type for POST/PUT endpoints (default: application/json)
+  endpoint_content_types:
+    stream: "multipart/form-data"
 
   # Outbound: internal name -> API field name (for request payloads)
   request_fields:
@@ -58,6 +69,17 @@ api_format:
     token_cost: "TokenCost"
     file_name: "FileName"
     processing_status: "ProcessingStatus"
+
+  # Fields sent to the stream endpoint (internal name -> API field name)
+  stream_request_fields:
+    message: "user_input"
+    model_name: "model_name"
+
+  # Default values for stream request fields
+  stream_request_defaults:
+    web_search: "true"
+    temperature: "0.5"
+    premium: "false"
 
   # Streaming response configuration
   stream:

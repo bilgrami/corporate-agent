@@ -224,38 +224,60 @@ class TestStreamOrComplete:
         assert text == "partial"
         assert msg is None
 
-    def test_fallback_to_complete(self, mock_config: ConfigManager) -> None:
-        client = MagicMock()
-        client.stream_chat.side_effect = httpx.HTTPError("connection failed")
-        client.create_chat.return_value = {
-            "SessionId": "s1",
-            "UserOrBot": "assistant",
-            "Message": "fallback response",
-            "TokensConsumed": 50,
-            "TokenCost": 0.001,
-            "ModelName": "gpt-5",
-            "DisplayName": "GPT-5",
-            "TimestampUTC": "2026-02-07T12:00:00Z",
-        }
-        client.parse_message = MagicMock(
-            return_value=MagicMock(content="fallback response")
-        )
+    def test_fallback_on_stream_error(self, mock_config: ConfigManager) -> None:
+        """When streaming fails with HTTPError, fallback also tries stream_chat."""
+        lines = [
+            json.dumps({"Task": "Intermediate", "Steps": [{"data": "recovered"}], "Message": "recovered"}),
+            json.dumps({"Task": "Complete", "TokensConsumed": 50, "TokenCost": 0.001, "SessionId": "s1", "Steps": [], "Message": ""}),
+        ]
+        fallback_resp = MagicMock(spec=httpx.Response)
+        fallback_resp.text = "\n".join(lines)
 
+        client = MagicMock()
+        client.stream_chat.side_effect = [
+            httpx.HTTPError("connection failed"),
+            fallback_resp,
+        ]
         text, msg = stream_or_complete(
             client, "hello", "gpt-5", None, mock_config, use_streaming=True
         )
-        assert text == "fallback response"
+        assert text == "recovered"
+        assert msg is not None
+
+    def test_both_paths_fail(self, mock_config: ConfigManager) -> None:
+        """When both streaming and fallback fail, returns empty."""
+        client = MagicMock()
+        client.stream_chat.side_effect = httpx.HTTPError("connection failed")
+        text, msg = stream_or_complete(
+            client, "hello", "gpt-5", None, mock_config, use_streaming=True
+        )
+        assert text == ""
+        assert msg is None
 
     def test_no_stream_mode(self, mock_config: ConfigManager) -> None:
+        """Non-streaming mode uses two-step create+stream, parsed as complete response."""
+        lines = [
+            json.dumps({"Task": "Intermediate", "Steps": [{"data": "direct "}], "Message": "direct "}),
+            json.dumps({"Task": "Intermediate", "Steps": [{"data": "response"}], "Message": "response"}),
+            json.dumps({
+                "Task": "Complete",
+                "TokensConsumed": 50,
+                "TokenCost": 0.001,
+                "SessionId": "s1",
+                "Steps": [],
+                "Message": "",
+            }),
+        ]
+        resp = MagicMock(spec=httpx.Response)
+        resp.text = "\n".join(lines)
+
         client = MagicMock()
-        client.create_chat.return_value = {
-            "SessionId": "s1",
-            "Message": "direct response",
-        }
-        client.parse_message.return_value = MagicMock(content="direct response")
+        client.stream_chat.return_value = resp
 
         text, msg = stream_or_complete(
             client, "hello", "gpt-5", None, mock_config, use_streaming=False
         )
         assert text == "direct response"
-        client.stream_chat.assert_not_called()
+        assert msg is not None
+        assert msg.tokens_consumed == 50
+        client.stream_chat.assert_called_once()

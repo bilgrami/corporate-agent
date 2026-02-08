@@ -87,23 +87,16 @@ class GenAIClient:
         model: str,
         session_id: str | None = None,
     ) -> dict[str, Any]:
-        """POST to create a new chat message."""
+        """Create a new chat session entry."""
         client = self._get_client()
         sid = session_id or str(uuid.uuid4())
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        method = self._mapper.endpoint_method("chat_create")
 
-        payload = self._mapper.build_request_payload(
-            session_id=sid, message=message, model_name=model,
-        )
-
-        resp = client.post(
+        resp = client.request(
+            method,
             self._mapper.endpoint("chat_create"),
-            params={
-                "chat_type": "unified",
-                "timestamp": ts,
-                "session_id": sid,
-            },
-            json=payload,
+            params={"chat_type": "unified", "timestamp": ts, "session_id": sid},
         )
         result: dict[str, Any] = self._handle_response(resp)
         return result
@@ -151,25 +144,29 @@ class GenAIClient:
         model: str,
         session_id: str | None = None,
     ) -> httpx.Response:
-        """POST to create chat and return streaming response."""
+        """Two-step flow: create session entry, then stream the response."""
         client = self._get_client()
         sid = session_id or str(uuid.uuid4())
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        payload = self._mapper.build_request_payload(
-            session_id=sid, message=message, model_name=model,
-        )
+        # Step 1: Create session entry
+        self.create_chat(message, model, sid)
 
-        resp = client.post(
-            self._mapper.endpoint("chat_create"),
-            params={
-                "chat_type": "unified",
-                "timestamp": ts,
-                "session_id": sid,
-            },
-            json=payload,
-            headers={"accept": "text/event-stream"},
-        )
+        # Step 2: Stream from the stream endpoint
+        content_type = self._mapper.endpoint_content_type("stream")
+        payload = self._mapper.build_stream_payload(message=message, model_name=model)
+
+        if content_type == "multipart/form-data":
+            resp = client.post(
+                self._mapper.endpoint("stream", session_id=sid),
+                data=payload,
+                headers={"accept": "*/*"},
+            )
+        else:
+            resp = client.post(
+                self._mapper.endpoint("stream", session_id=sid),
+                json=payload,
+                headers={"accept": "text/event-stream"},
+            )
         if resp.status_code == 401:
             raise AuthError("Token expired or invalid. Run 'genai auth login'.")
         resp.raise_for_status()

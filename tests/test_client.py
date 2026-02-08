@@ -80,19 +80,39 @@ class TestGenAIClient:
 
     @respx.mock
     def test_create_chat(self, client: GenAIClient) -> None:
-        respx.post("https://api-genai.test.com/api/v1/chathistory/create").mock(
-            return_value=httpx.Response(
-                200,
-                json={
-                    "SessionId": "new-session",
-                    "Message": "Hi!",
-                    "UserOrBot": "assistant",
-                    "TokensConsumed": 100,
-                },
-            )
+        route = respx.get("https://api-genai.test.com/api/v1/chathistory/create").mock(
+            return_value=httpx.Response(200, json={"status": "created"})
         )
         result = client.create_chat("hello", "gpt-5-chat-global")
-        assert result["Message"] == "Hi!"
+        assert result["status"] == "created"
+        assert route.called
+        request = route.calls[0].request
+        assert request.method == "GET"
+        assert "session_id" in str(request.url)
+        assert "chat_type=unified" in str(request.url)
+
+    @respx.mock
+    def test_stream_chat_two_step(self, client: GenAIClient) -> None:
+        """stream_chat does create (GET) then stream (POST form-data)."""
+        import json
+
+        # Step 1: create session entry
+        respx.get("https://api-genai.test.com/api/v1/chathistory/create").mock(
+            return_value=httpx.Response(200, json={"status": "created"})
+        )
+        # Step 2: stream endpoint
+        stream_body = "\n".join([
+            json.dumps({"Task": "Intermediate", "Steps": [{"data": "Hi"}], "Message": "Hi"}),
+            json.dumps({"Task": "Complete", "TokensConsumed": 100, "TokenCost": 0.01, "SessionId": "s1", "Steps": [], "Message": ""}),
+        ])
+        stream_route = respx.post(url__regex=r".*/api/v1/conversation/.*/stream").mock(
+            return_value=httpx.Response(200, text=stream_body)
+        )
+        resp = client.stream_chat("hello", "gpt-5-chat-global", session_id="s1")
+        assert resp.status_code == 200
+        assert stream_route.called
+        request = stream_route.calls[0].request
+        assert request.method == "POST"
 
     @respx.mock
     def test_upload_document(self, client: GenAIClient) -> None:

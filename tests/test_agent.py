@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -15,6 +16,21 @@ from genai_cli.config import ConfigManager
 from genai_cli.display import Display
 from genai_cli.session import SessionManager
 from genai_cli.token_tracker import TokenTracker
+
+
+def _make_stream_response(content: str, session_id: str = "s1") -> MagicMock:
+    """Build a mock httpx.Response whose .text is a JSON-lines stream body."""
+    import httpx
+    lines = [
+        json.dumps({"Task": "Intermediate", "Steps": [{"data": content}], "Message": content}),
+        json.dumps({
+            "Task": "Complete", "TokensConsumed": 50, "TokenCost": 0.001,
+            "SessionId": session_id, "Steps": [], "Message": "",
+        }),
+    ]
+    resp = MagicMock(spec=httpx.Response)
+    resp.text = "\n".join(lines)
+    return resp
 
 
 @pytest.fixture
@@ -64,20 +80,8 @@ class TestAgentLoop:
         tracker: TokenTracker,
         session: dict,
     ) -> None:
-        mock_client.create_chat.return_value = {
-            "SessionId": session["session_id"],
-            "Message": "No code changes needed.",
-            "UserOrBot": "assistant",
-            "TokensConsumed": 50,
-            "TokenCost": 0.001,
-            "ModelName": "gpt-5",
-            "DisplayName": "GPT-5",
-            "TimestampUTC": "2026-02-07T12:00:00Z",
-        }
-        mock_client.parse_message.return_value = MagicMock(
-            content="No code changes needed.",
-            tokens_consumed=50,
-            token_cost=0.001,
+        mock_client.stream_chat.return_value = _make_stream_response(
+            "No code changes needed.", session["session_id"],
         )
 
         agent = AgentLoop(
@@ -98,20 +102,8 @@ class TestAgentLoop:
         tmp_path: Path,
     ) -> None:
         # Response with code block so it always has actions
-        mock_client.create_chat.return_value = {
-            "SessionId": session["session_id"],
-            "Message": '```python:test_out.py\nprint("hi")\n```',
-            "UserOrBot": "assistant",
-            "TokensConsumed": 50,
-            "TokenCost": 0.001,
-            "ModelName": "gpt-5",
-            "DisplayName": "GPT-5",
-            "TimestampUTC": "2026-02-07T12:00:00Z",
-        }
-        mock_client.parse_message.return_value = MagicMock(
-            content='```python:test_out.py\nprint("hi")\n```',
-            tokens_consumed=50,
-            token_cost=0.001,
+        mock_client.stream_chat.return_value = _make_stream_response(
+            '```python:test_out.py\nprint("hi")\n```', session["session_id"],
         )
 
         agent = AgentLoop(
@@ -148,20 +140,8 @@ class TestAgentLoop:
         tracker: TokenTracker,
         session: dict,
     ) -> None:
-        mock_client.create_chat.return_value = {
-            "SessionId": session["session_id"],
-            "Message": '```python:dry.py\ncode\n```',
-            "UserOrBot": "assistant",
-            "TokensConsumed": 50,
-            "TokenCost": 0.001,
-            "ModelName": "gpt-5",
-            "DisplayName": "GPT-5",
-            "TimestampUTC": "2026-02-07T12:00:00Z",
-        }
-        mock_client.parse_message.return_value = MagicMock(
-            content='```python:dry.py\ncode\n```',
-            tokens_consumed=50,
-            token_cost=0.001,
+        mock_client.stream_chat.return_value = _make_stream_response(
+            '```python:dry.py\ncode\n```', session["session_id"],
         )
 
         agent = AgentLoop(
@@ -214,20 +194,8 @@ class TestAgentLoop:
         session: dict,
         sample_project_dir: Path,
     ) -> None:
-        mock_client.create_chat.return_value = {
-            "SessionId": session["session_id"],
-            "Message": "Reviewed the code. Looks good!",
-            "UserOrBot": "assistant",
-            "TokensConsumed": 100,
-            "TokenCost": 0.002,
-            "ModelName": "gpt-5",
-            "DisplayName": "GPT-5",
-            "TimestampUTC": "2026-02-07T12:00:00Z",
-        }
-        mock_client.parse_message.return_value = MagicMock(
-            content="Reviewed the code. Looks good!",
-            tokens_consumed=100,
-            token_cost=0.002,
+        mock_client.stream_chat.return_value = _make_stream_response(
+            "Reviewed the code. Looks good!", session["session_id"],
         )
 
         agent = AgentLoop(
@@ -286,20 +254,8 @@ class TestAgentLoop:
             "    return True\n"
             ">>>>>>> REPLACE\n"
         )
-        mock_client.create_chat.return_value = {
-            "SessionId": session["session_id"],
-            "Message": sr_response,
-            "UserOrBot": "assistant",
-            "TokensConsumed": 50,
-            "TokenCost": 0.001,
-            "ModelName": "gpt-5",
-            "DisplayName": "GPT-5",
-            "TimestampUTC": "2026-02-07T12:00:00Z",
-        }
-        mock_client.parse_message.return_value = MagicMock(
-            content=sr_response,
-            tokens_consumed=50,
-            token_cost=0.001,
+        mock_client.stream_chat.return_value = _make_stream_response(
+            sr_response, session["session_id"],
         )
 
         agent = AgentLoop(
@@ -398,20 +354,8 @@ class TestAgentFeedback:
             "replacement\n"
             ">>>>>>> REPLACE\n"
         )
-        mock_client.create_chat.return_value = {
-            "SessionId": session["session_id"],
-            "Message": sr_response,
-            "UserOrBot": "assistant",
-            "TokensConsumed": 50,
-            "TokenCost": 0.001,
-            "ModelName": "gpt-5",
-            "DisplayName": "GPT-5",
-            "TimestampUTC": "2026-02-07T12:00:00Z",
-        }
-        mock_client.parse_message.return_value = MagicMock(
-            content=sr_response,
-            tokens_consumed=50,
-            token_cost=0.001,
+        mock_client.stream_chat.return_value = _make_stream_response(
+            sr_response, session["session_id"],
         )
 
         agent = AgentLoop(

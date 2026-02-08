@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from genai_cli.auth import AuthError
 from genai_cli.config import ConfigManager
 from genai_cli.mapper import ResponseMapper
 from genai_cli.models import ChatMessage
@@ -163,10 +164,38 @@ def stream_or_complete(
                 )
 
             return full_text, chat_msg
+        except AuthError:
+            raise
         except (httpx.HTTPError, Exception):
             pass
 
-    # Fallback to complete response
-    result = client.create_chat(message, model, session_id)
-    msg = client.parse_message(result)
-    return msg.content, msg
+    # Fallback: two-step create + stream, parsed as a complete response
+    try:
+        resp = client.stream_chat(message, model, session_id)
+        handler = StreamHandler(config)
+        mapper = config.mapper
+
+        text_parts: list[str] = []
+        final_meta: dict[str, Any] | None = None
+        for chunk in handler.parse_stream_response(resp):
+            text = mapper.extract_stream_content(chunk)
+            if text:
+                text_parts.append(text)
+            if mapper.is_stream_complete(chunk):
+                final_meta = mapper.map_stream_final(chunk)
+
+        full_text = "".join(text_parts)
+        chat_msg: ChatMessage | None = None
+        if final_meta:
+            chat_msg = ChatMessage(
+                session_id=final_meta.get("session_id", ""),
+                role="assistant",
+                content=full_text,
+                tokens_consumed=final_meta.get("tokens_consumed", 0),
+                token_cost=final_meta.get("token_cost", 0.0),
+            )
+        return full_text, chat_msg
+    except AuthError:
+        raise
+    except (httpx.HTTPError, Exception):
+        return "", None
