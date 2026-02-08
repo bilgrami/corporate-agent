@@ -121,19 +121,20 @@ class Display:
                 self._console.print(line)
 
     def print_history(self, sessions: list[dict[str, Any]]) -> None:
-        """Print a list of chat sessions."""
+        """Print a list of chat sessions (expects internal field names)."""
         table = Table(title="Recent Conversations")
         table.add_column("Session ID", style="cyan")
-        table.add_column("Model")
-        table.add_column("Messages", justify="right")
+        table.add_column("Title")
         table.add_column("Date")
+        table.add_column("User")
 
         for session in sessions:
-            sid = session.get("SessionId", "")
-            model = session.get("ModelName", "")
-            msg_count = str(len(session.get("Messages", []))) if "Messages" in session else "?"
-            ts = session.get("TimestampUTC", "")
-            table.add_row(sid[:12] + "...", model, msg_count, ts[:19])
+            sid = session.get("session_id", "")
+            title = session.get("chat_title", "")
+            ts = session.get("timestamp", "")
+            user = session.get("user_email", "")
+            sid_display = (sid[:12] + "...") if len(sid) > 12 else sid
+            table.add_row(sid_display, title, ts[:19], user)
 
         self._console.print(table)
 

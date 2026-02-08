@@ -4,6 +4,49 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-07 | feat: YAML-driven ResponseMapper for API format decoupling
+
+### Summary
+Introduced a `ResponseMapper` class driven by `config/api_format.yaml` that
+translates between any corporate GenAI API's field names and internal snake_case
+representations. Supporting a different enterprise AI platform is now a YAML-only
+change — no Python code edits needed.
+
+### Files Changed
+- `config/api_format.yaml` — New: field mappings, endpoint paths, stream config
+- `src/genai_cli/mapper.py` — New: ResponseMapper class + `_resolve_path()` utility
+- `src/genai_cli/config.py` — Loads api_format.yaml (3-level merge), adds `mapper` property
+- `src/genai_cli/client.py` — Uses mapper for endpoints, payloads, and parse_message
+- `src/genai_cli/streaming.py` — Mapper-driven stream parsing (JSON-lines + SSE), extracts
+  token metadata from final chunk, returns ChatMessage with token counts
+- `src/genai_cli/display.py` — `print_history()` now uses internal field names
+- `src/genai_cli/cli.py` — History/usage commands map through mapper before display
+- `tests/test_mapper.py` — New: 26 tests for all mapper methods
+- `tests/test_streaming.py` — Rewritten: 20 tests for mapper-driven parsing + legacy SSE
+- `tests/test_client.py` — Updated parse_message test for instance method
+- `tests/test_display.py` — Added history/usage internal field tests
+
+### Rationale
+The code previously hardcoded PascalCase field names from one specific corporate API.
+This made the tool unusable for any other enterprise AI platform. The ResponseMapper
+pattern decouples field name translation into configuration, following the same
+3-level precedence (package > user > project) as settings.yaml.
+
+### Behavior / Compatibility Implications
+- `parse_message` is now an instance method on GenAIClient (was static)
+- Streaming now returns a `ChatMessage` with token counts from the final chunk
+  (previously returned `None`, so token tracking was always 0 during streaming)
+- `print_history()` expects internal field names; callers must map first
+- Custom API formats can be defined in `~/.genai-cli/api_format.yaml` or
+  `.genai-cli/api_format.yaml` to override the default
+
+### Testing Recommendations
+- `make test` — 335 tests passing, 83% coverage
+- To test decoupling: edit field names in api_format.yaml, verify code still works
+- With VPN + token: `genai history` shows chat titles and dates (not blank)
+
+---
+
 ## 2026-02-07 | feat: /exit and /export commands for REPL
 
 ### Summary

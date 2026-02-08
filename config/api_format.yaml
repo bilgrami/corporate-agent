@@ -1,0 +1,82 @@
+# API response format mapping.
+# Maps between corporate API field names and internal snake_case names.
+# To support a different corporate GenAI platform, create a custom
+# api_format.yaml in ~/.genai-cli/ or .genai-cli/ to override.
+
+api_format:
+  name: "corporate-genai-v1"
+
+  # Endpoint URL paths ({session_id} is substituted at runtime)
+  endpoints:
+    usage: "/api/v1/user/usage"
+    chat_history: "/api/v1/chathistory/"
+    chat_create: "/api/v1/chathistory/create"
+    conversation: "/api/v1/chathistory/{session_id}"
+    conversation_details: "/api/v1/conversation/{session_id}/details"
+    document_upload: "/api/v1/conversation/{session_id}/document/upload"
+
+  # Outbound: internal name -> API field name (for request payloads)
+  request_fields:
+    session_id: "SessionId"
+    message: "Message"
+    model_name: "ModelName"
+
+  # Inbound: internal name -> API field name (for chat message responses)
+  message_fields:
+    session_id: "SessionId"
+    role: "UserOrBot"
+    content: "Message"
+    timestamp: "TimestampUTC"
+    model_name: "ModelName"
+    display_name: "DisplayName"
+    tokens_consumed: "TokensConsumed"
+    token_cost: "TokenCost"
+    upload_content: "UploadContent"
+
+  # How the API represents user/assistant roles
+  role_values:
+    assistant: "assistant"
+    user: "user"
+
+  # Chat history list entries
+  history_fields:
+    session_id: "SessionId"
+    chat_title: "ChatTitle"
+    timestamp: "Timestamp"
+    user_email: "UserEmail"
+
+  # Usage endpoint fields
+  usage_fields:
+    input_tokens: "input_tokens"
+    output_tokens: "output_tokens"
+    amount_dollars: "amount_dollars"
+
+  # Uploaded document detail fields
+  document_fields:
+    document_id: "DocumentId"
+    tokens_consumed: "TokensConsumed"
+    token_cost: "TokenCost"
+    file_name: "FileName"
+    processing_status: "ProcessingStatus"
+
+  # Streaming response configuration
+  stream:
+    # "sse" = lines prefixed with "data: "; "jsonlines" = one JSON per line
+    format: "jsonlines"
+    line_prefix: ""
+    done_signal: "[DONE]"
+
+    # Where to extract text from each chunk (tried in order)
+    content_paths:
+      - "Steps[0].data"
+      - "Message"
+
+    # Field that indicates chunk type
+    task_field: "Task"
+    task_complete: "Complete"
+
+    # Fields to extract from the final (complete) chunk
+    final_chunk_fields:
+      tokens_consumed: "TokensConsumed"
+      token_cost: "TokenCost"
+      session_id: "SessionId"

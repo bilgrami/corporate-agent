@@ -10,6 +10,7 @@ import httpx
 
 from genai_cli.auth import AuthError, AuthManager
 from genai_cli.config import ConfigManager
+from genai_cli.mapper import ResponseMapper
 from genai_cli.models import ChatMessage
 
 
@@ -23,6 +24,7 @@ class GenAIClient:
     ) -> None:
         self._config = config
         self._auth = auth
+        self._mapper = config.mapper
         self._client: httpx.Client | None = None
 
     def _get_client(self) -> httpx.Client:
@@ -54,28 +56,28 @@ class GenAIClient:
         return resp.json()
 
     def get_usage(self) -> dict[str, Any]:
-        """GET /api/v1/user/usage."""
+        """GET usage endpoint."""
         client = self._get_client()
-        resp = client.get("/api/v1/user/usage")
+        resp = client.get(self._mapper.endpoint("usage"))
         result: dict[str, Any] = self._handle_response(resp)
         return result
 
     def list_history(
         self, skip: int = 0, limit: int = 20
     ) -> list[dict[str, Any]]:
-        """GET /api/v1/chathistory/?skip={n}&limit={n}."""
+        """GET chat history list."""
         client = self._get_client()
         resp = client.get(
-            "/api/v1/chathistory/",
+            self._mapper.endpoint("chat_history"),
             params={"skip": skip, "limit": limit},
         )
         result: list[dict[str, Any]] = self._handle_response(resp)
         return result
 
     def get_conversation(self, session_id: str) -> list[dict[str, Any]]:
-        """GET /api/v1/chathistory/{session_id}."""
+        """GET conversation messages."""
         client = self._get_client()
-        resp = client.get(f"/api/v1/chathistory/{session_id}")
+        resp = client.get(self._mapper.endpoint("conversation", session_id=session_id))
         result: list[dict[str, Any]] = self._handle_response(resp)
         return result
 
@@ -85,19 +87,17 @@ class GenAIClient:
         model: str,
         session_id: str | None = None,
     ) -> dict[str, Any]:
-        """POST /api/v1/chathistory/create."""
+        """POST to create a new chat message."""
         client = self._get_client()
         sid = session_id or str(uuid.uuid4())
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        payload = {
-            "SessionId": sid,
-            "Message": message,
-            "ModelName": model,
-        }
+        payload = self._mapper.build_request_payload(
+            session_id=sid, message=message, model_name=model,
+        )
 
         resp = client.post(
-            "/api/v1/chathistory/create",
+            self._mapper.endpoint("chat_create"),
             params={
                 "chat_type": "unified",
                 "timestamp": ts,
@@ -114,10 +114,10 @@ class GenAIClient:
         content: str,
         filename: str = "upload.txt",
     ) -> dict[str, Any]:
-        """PUT /api/v1/conversation/{id}/document/upload."""
+        """PUT document upload."""
         client = self._get_client()
         resp = client.put(
-            f"/api/v1/conversation/{session_id}/document/upload",
+            self._mapper.endpoint("document_upload", session_id=session_id),
             files={"file": (filename, content.encode(), "text/plain")},
         )
         result: dict[str, Any] = self._handle_response(resp)
@@ -137,9 +137,11 @@ class GenAIClient:
         return results
 
     def get_conversation_details(self, session_id: str) -> dict[str, Any]:
-        """GET /api/v1/conversation/{id}/details."""
+        """GET conversation document details."""
         client = self._get_client()
-        resp = client.get(f"/api/v1/conversation/{session_id}/details")
+        resp = client.get(
+            self._mapper.endpoint("conversation_details", session_id=session_id)
+        )
         result: dict[str, Any] = self._handle_response(resp)
         return result
 
@@ -154,14 +156,12 @@ class GenAIClient:
         sid = session_id or str(uuid.uuid4())
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        payload = {
-            "SessionId": sid,
-            "Message": message,
-            "ModelName": model,
-        }
+        payload = self._mapper.build_request_payload(
+            session_id=sid, message=message, model_name=model,
+        )
 
         resp = client.post(
-            "/api/v1/chathistory/create",
+            self._mapper.endpoint("chat_create"),
             params={
                 "chat_type": "unified",
                 "timestamp": ts,
@@ -181,17 +181,6 @@ class GenAIClient:
             self._client.close()
             self._client = None
 
-    @staticmethod
-    def parse_message(data: dict[str, Any]) -> ChatMessage:
-        """Parse an API response dict into a ChatMessage."""
-        return ChatMessage(
-            session_id=data.get("SessionId", ""),
-            role="assistant" if data.get("UserOrBot") == "assistant" else "user",
-            content=data.get("Message", ""),
-            timestamp=data.get("TimestampUTC", ""),
-            model_name=data.get("ModelName", ""),
-            display_name=data.get("DisplayName", ""),
-            tokens_consumed=data.get("TokensConsumed", 0),
-            token_cost=data.get("TokenCost", 0.0),
-            upload_content=data.get("UploadContent"),
-        )
+    def parse_message(self, data: dict[str, Any]) -> ChatMessage:
+        """Parse an API response dict into a ChatMessage using the mapper."""
+        return self._mapper.map_message(data)

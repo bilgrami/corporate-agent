@@ -113,3 +113,33 @@ class TestDisplay:
         text = out.getvalue()
         assert "src/a.py" in text
         assert "src/b.py" in text
+
+    def test_print_history_internal_fields(self) -> None:
+        out = StringIO()
+        d = Display(file=out)
+        d.print_history([
+            {
+                "session_id": "abc-123-def-456",
+                "chat_title": "My Chat",
+                "timestamp": "2026-02-03T18:24:15",
+                "user_email": "user@corp.com",
+            },
+        ])
+        text = out.getvalue()
+        assert "abc-123-def-" in text
+        assert "My Chat" in text
+        assert "2026-02-03T18:24" in text
+        assert "user@corp.com" in text
+
+    def test_print_usage_internal_fields(self) -> None:
+        out = StringIO()
+        d = Display(file=out)
+        d.print_usage({
+            "input_tokens": 1192796,
+            "output_tokens": 67420,
+            "amount_dollars": 5.04,
+        })
+        text = out.getvalue()
+        assert "input_tokens" in text
+        assert "1192796" in text
+        assert "output_tokens" in text

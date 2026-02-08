@@ -221,7 +221,7 @@ def auth_verify(ctx: click.Context) -> None:
         client = GenAIClient(config, auth_mgr)
         usage = client.get_usage()
         display.print_success("API connection verified")
-        display.print_usage(usage)
+        display.print_usage(config.mapper.map_usage(usage))
         client.close()
     except AuthError as e:
         display.print_error(f"API verification failed: {e}")
@@ -242,7 +242,9 @@ def history(ctx: click.Context, limit: int) -> None:
     try:
         client = GenAIClient(config, auth_mgr)
         sessions = client.list_history(limit=limit)
-        display.print_history(sessions)
+        mapper = config.mapper
+        mapped = [mapper.map_history_entry(s) for s in sessions]
+        display.print_history(mapped)
         client.close()
     except AuthError as e:
         display.print_error(str(e))
@@ -263,7 +265,8 @@ def usage(ctx: click.Context) -> None:
     try:
         client = GenAIClient(config, auth_mgr)
         usage_data = client.get_usage()
-        display.print_usage(usage_data)
+        mapped_usage = config.mapper.map_usage(usage_data)
+        display.print_usage(mapped_usage)
         client.close()
     except AuthError as e:
         display.print_error(str(e))

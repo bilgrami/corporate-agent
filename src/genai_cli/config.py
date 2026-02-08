@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 
+from genai_cli.mapper import ResponseMapper
 from genai_cli.models import AppSettings, FileTypeConfig, ModelInfo
 
 
@@ -73,6 +74,8 @@ class ConfigManager:
         self._models: dict[str, ModelInfo] = {}
         self._headers: dict[str, str] = {}
         self._system_prompt: str = ""
+        self._api_format: dict[str, Any] = {}
+        self._mapper: ResponseMapper | None = None
         self._load()
 
     def _load(self) -> None:
@@ -140,6 +143,26 @@ class ConfigManager:
         raw_prompt = prompt_data.get("system_prompt", "")
         agent_name = self._merged.get("agent_name", "ai-assistant")
         self._system_prompt = raw_prompt.replace("{agent_name}", agent_name)
+
+        # Load API format mapping (same 3-level merge: package → user → project)
+        api_fmt = _load_yaml(pkg_dir / "api_format.yaml").get("api_format", {})
+        api_fmt = _deep_merge(
+            api_fmt,
+            _load_yaml(_user_config_dir() / "api_format.yaml").get("api_format", {}),
+        )
+        api_fmt = _deep_merge(
+            api_fmt,
+            _load_yaml(_project_config_dir() / "api_format.yaml").get("api_format", {}),
+        )
+        self._api_format = api_fmt
+        self._mapper = None  # reset cached mapper
+
+    @property
+    def mapper(self) -> ResponseMapper:
+        """Return the ResponseMapper for API field translation."""
+        if self._mapper is None:
+            self._mapper = ResponseMapper(self._api_format)
+        return self._mapper
 
     def set_override(self, key: str, value: Any) -> None:
         """Set a CLI-level override."""

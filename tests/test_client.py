@@ -160,9 +160,9 @@ class TestGenAIClient:
             c.get_usage()
 
     def test_parse_message(
-        self, mock_chat_response: dict[str, Any]
+        self, client: GenAIClient, mock_chat_response: dict[str, Any]
     ) -> None:
-        msg = GenAIClient.parse_message(mock_chat_response)
+        msg = client.parse_message(mock_chat_response)
         assert msg.role == "assistant"
         assert msg.content == "Hello! How can I help you?"
         assert msg.tokens_consumed == 150
