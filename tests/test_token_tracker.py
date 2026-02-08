@@ -96,6 +96,21 @@ class TestTokenTracker:
         assert usage.context_window == 128000
         assert usage.estimated_cost == 0.01
 
+    def test_subtract_consumed(self, mock_config: ConfigManager) -> None:
+        tracker = TokenTracker(mock_config)
+        tracker.add_consumed(5000, 0.05)
+        tracker.subtract_consumed(2000, 0.02)
+        assert tracker.consumed == 3000
+        usage = tracker.to_usage()
+        assert usage.estimated_cost == pytest.approx(0.03)
+
+    def test_subtract_consumed_clamps_to_zero(self, mock_config: ConfigManager) -> None:
+        tracker = TokenTracker(mock_config)
+        tracker.add_consumed(1000, 0.01)
+        tracker.subtract_consumed(5000, 0.10)
+        assert tracker.consumed == 0
+        assert tracker.to_usage().estimated_cost == 0.0
+
     def test_serialization_roundtrip(self, mock_config: ConfigManager) -> None:
         tracker = TokenTracker(mock_config)
         tracker.add_consumed(12345, 0.05)

@@ -76,6 +76,11 @@ class TokenTracker:
         self._context_window = model.context_window
         return True
 
+    def subtract_consumed(self, tokens: int, cost: float = 0.0) -> None:
+        """Remove consumed tokens (e.g., when rewinding)."""
+        self._consumed = max(0, self._consumed - tokens)
+        self._estimated_cost = max(0.0, self._estimated_cost - cost)
+
     def reset(self) -> None:
         """Reset consumed tokens to 0."""
         self._consumed = 0
