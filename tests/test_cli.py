@@ -55,10 +55,11 @@ class TestCLI:
         assert result.exit_code == 0
         assert "0.1.0" in result.output
 
-    def test_no_subcommand_shows_help(self, runner: CliRunner) -> None:
+    def test_no_subcommand_launches_repl(self, runner: CliRunner) -> None:
+        # With no subcommand, REPL launches (and exits on EOF from CliRunner)
         result = runner.invoke(main)
         assert result.exit_code == 0
-        assert "Usage" in result.output
+        assert "Corporate AI CLI" in result.output
 
     def test_models(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["models"])

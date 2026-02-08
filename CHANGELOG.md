@@ -4,6 +4,44 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-07 | feat: Phase 3 — Session management, REPL, and token tracking
+
+### Summary
+Added interactive REPL with all slash commands, persistent session management,
+and token tracking with color-coded context window status.
+
+### Files Changed
+- `src/genai_cli/token_tracker.py` — New: TokenTracker with thresholds, model switching, serialization
+- `src/genai_cli/session.py` — New: SessionManager for create/save/load/list/clear/compact sessions
+- `src/genai_cli/repl.py` — New: ReplSession with prompt_toolkit, all slash commands
+- `src/genai_cli/cli.py` — Modified: default (no subcommand) launches REPL, added `resume` command
+- `tests/test_token_tracker.py` — 17 tests for tracking, thresholds, serialization
+- `tests/test_session.py` — 16 tests for session CRUD, persistence, pruning
+- `tests/test_repl.py` — 26 tests for all slash commands
+- `tests/test_cli.py` — Updated for REPL launch behavior
+- `docs/implementation_plans/phase-03-session-repl/agents.md` — Phase 3 agent doc
+
+### Rationale
+Interactive REPL is the primary interface for developers. Session persistence
+enables resuming conversations. Token tracking prevents context window overflow.
+
+### Behavior / Compatibility Implications
+- `genai` with no subcommand now launches REPL (previously showed help)
+- Sessions saved to ~/.genai-cli/sessions/ as JSON
+- Token status: green (<80%), yellow (80-95%), red (>95%)
+
+### Testing Recommendations
+- `genai` to launch REPL, try /help, /status, /model, /clear, /quit
+- `genai resume <id>` to verify session persistence
+- `make test` — 171 tests passing
+
+### Follow-ups
+- [ ] Response applier for automatic code changes
+- [ ] Agent loop for multi-round interactions
+- [ ] Skills system with SKILL.md support
+
+---
+
 ## 2026-02-07 | feat: Phase 2 — File bundler and upload integration
 
 ### Summary

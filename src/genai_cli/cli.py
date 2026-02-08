@@ -48,7 +48,10 @@ def main(
     ctx.obj["json_out"] = json_out
 
     if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+        from genai_cli.repl import ReplSession
+
+        repl = ReplSession(ctx.obj["config"], ctx.obj["display"])
+        repl.run()
 
 
 @main.command()
@@ -363,6 +366,20 @@ def files_cmd(ctx: click.Context, paths: tuple[str, ...], file_type: str) -> Non
             bundle.file_type, bundle.file_count, bundle.estimated_tokens
         )
         display.print_file_list(bundle.file_paths)
+
+
+@main.command("resume")
+@click.argument("session_id")
+@click.pass_context
+def resume_cmd(ctx: click.Context, session_id: str) -> None:
+    """Resume a saved conversation."""
+    from genai_cli.repl import ReplSession
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    repl = ReplSession(config, display, session_id=session_id)
+    repl.run()
 
 
 if __name__ == "__main__":
