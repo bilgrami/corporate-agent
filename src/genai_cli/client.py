@@ -146,10 +146,12 @@ class GenAIClient:
     ) -> httpx.Response:
         """Two-step flow: create session entry, then stream the response."""
         client = self._get_client()
+        new_session = session_id is None
         sid = session_id or str(uuid.uuid4())
 
-        # Step 1: Create session entry
-        self.create_chat(message, model, sid)
+        # Step 1: Create session entry (only for new conversations)
+        if new_session:
+            self.create_chat(message, model, sid)
 
         # Step 2: Stream from the stream endpoint
         content_type = self._mapper.endpoint_content_type("stream")
