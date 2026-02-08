@@ -1,0 +1,261 @@
+"""Tests for agent loop module."""
+
+from __future__ import annotations
+
+from io import StringIO
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+import yaml
+
+from genai_cli.agent import AgentLoop, AgentResult
+from genai_cli.config import ConfigManager
+from genai_cli.display import Display
+from genai_cli.session import SessionManager
+from genai_cli.token_tracker import TokenTracker
+
+
+@pytest.fixture
+def agent_config(tmp_path: Path) -> ConfigManager:
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    settings = {
+        "api_base_url": "https://api.test.com",
+        "session_dir": str(session_dir),
+        "default_model": "gpt-5-chat-global",
+        "streaming": False,
+    }
+    p = tmp_path / "settings.yaml"
+    p.write_text(yaml.dump(settings))
+    return ConfigManager(config_path=str(p))
+
+
+@pytest.fixture
+def display() -> Display:
+    return Display(file=StringIO())
+
+
+@pytest.fixture
+def tracker(agent_config: ConfigManager) -> TokenTracker:
+    return TokenTracker(agent_config)
+
+
+@pytest.fixture
+def session(agent_config: ConfigManager) -> dict:
+    mgr = SessionManager(agent_config)
+    return mgr.create_session()
+
+
+@pytest.fixture
+def mock_client() -> MagicMock:
+    client = MagicMock()
+    client.upload_bundles.return_value = [{"status": "ok"}]
+    return client
+
+
+class TestAgentLoop:
+    def test_single_round_no_actions(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        mock_client.create_chat.return_value = {
+            "SessionId": session["session_id"],
+            "Message": "No code changes needed.",
+            "UserOrBot": "assistant",
+            "TokensConsumed": 50,
+            "TokenCost": 0.001,
+            "ModelName": "gpt-5",
+            "DisplayName": "GPT-5",
+            "TimestampUTC": "2026-02-07T12:00:00Z",
+        }
+        mock_client.parse_message.return_value = MagicMock(
+            content="No code changes needed.",
+            tokens_consumed=50,
+            token_cost=0.001,
+        )
+
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+            max_rounds=3,
+        )
+        result = agent.run("fix bugs", "gpt-5")
+        assert result.stop_reason == "no_actions"
+        assert len(result.rounds) == 1
+
+    def test_max_rounds_reached(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+        tmp_path: Path,
+    ) -> None:
+        # Response with code block so it always has actions
+        mock_client.create_chat.return_value = {
+            "SessionId": session["session_id"],
+            "Message": '```python:test_out.py\nprint("hi")\n```',
+            "UserOrBot": "assistant",
+            "TokensConsumed": 50,
+            "TokenCost": 0.001,
+            "ModelName": "gpt-5",
+            "DisplayName": "GPT-5",
+            "TimestampUTC": "2026-02-07T12:00:00Z",
+        }
+        mock_client.parse_message.return_value = MagicMock(
+            content='```python:test_out.py\nprint("hi")\n```',
+            tokens_consumed=50,
+            token_cost=0.001,
+        )
+
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+            auto_apply=True, max_rounds=2,
+        )
+        result = agent.run("fix bugs", "gpt-5")
+        assert result.stop_reason == "max_rounds"
+        assert len(result.rounds) == 2
+
+    def test_token_limit_stops(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        # Push tracker to critical
+        tracker.add_consumed(125000)  # >95% of 128000
+
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+            max_rounds=5,
+        )
+        result = agent.run("fix bugs", "gpt-5")
+        assert result.stop_reason == "token_limit"
+
+    def test_dry_run(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        mock_client.create_chat.return_value = {
+            "SessionId": session["session_id"],
+            "Message": '```python:dry.py\ncode\n```',
+            "UserOrBot": "assistant",
+            "TokensConsumed": 50,
+            "TokenCost": 0.001,
+            "ModelName": "gpt-5",
+            "DisplayName": "GPT-5",
+            "TimestampUTC": "2026-02-07T12:00:00Z",
+        }
+        mock_client.parse_message.return_value = MagicMock(
+            content='```python:dry.py\ncode\n```',
+            tokens_consumed=50,
+            token_cost=0.001,
+        )
+
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+            dry_run=True, max_rounds=1,
+        )
+        result = agent.run("fix", "gpt-5")
+        # Dry run: blocks are parsed but files not applied
+        assert len(result.rounds) == 1
+
+    def test_stop(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+        )
+        agent.stop()
+        result = agent.run("fix", "gpt-5")
+        assert result.stop_reason == "user_cancelled"
+
+    def test_api_error_handled(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        mock_client.create_chat.side_effect = Exception("API error")
+        mock_client.stream_chat.side_effect = Exception("API error")
+
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+            max_rounds=1,
+        )
+        result = agent.run("fix", "gpt-5")
+        assert len(result.rounds) == 1
+
+    def test_with_files(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+        sample_project_dir: Path,
+    ) -> None:
+        mock_client.create_chat.return_value = {
+            "SessionId": session["session_id"],
+            "Message": "Reviewed the code. Looks good!",
+            "UserOrBot": "assistant",
+            "TokensConsumed": 100,
+            "TokenCost": 0.002,
+            "ModelName": "gpt-5",
+            "DisplayName": "GPT-5",
+            "TimestampUTC": "2026-02-07T12:00:00Z",
+        }
+        mock_client.parse_message.return_value = MagicMock(
+            content="Reviewed the code. Looks good!",
+            tokens_consumed=100,
+            token_cost=0.002,
+        )
+
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+            max_rounds=1,
+        )
+        result = agent.run(
+            "review", "gpt-5",
+            files=[str(sample_project_dir / "src")],
+        )
+        assert len(result.rounds) == 1
+        mock_client.upload_bundles.assert_called_once()
+
+    def test_build_full_prompt(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+        )
+        prompt = agent._build_full_prompt(
+            "fix bugs",
+            system_prompt="You are helpful.",
+            skill_prompt="Review for bugs.",
+        )
+        assert "You are helpful." in prompt
+        assert "Review for bugs." in prompt
+        assert "fix bugs" in prompt

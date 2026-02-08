@@ -39,6 +39,7 @@ class ReplSession:
         self._queued_files: list[str] = []
         self._auto_apply = config.settings.auto_apply
         self._model_name = config.settings.default_model
+        self._agent_rounds: int = 0
         self._running = False
 
         # Create or resume session
@@ -302,10 +303,12 @@ class ReplSession:
         self._display.print_success(f"Auto-apply: {state}")
 
     def _handle_agent(self, arg: str) -> None:
-        """Enable agent mode (placeholder)."""
+        """Enable agent mode for next message."""
         rounds = int(arg) if arg.isdigit() else 5
+        self._agent_rounds = rounds
         self._display.print_info(
-            f"Agent mode enabled for next message ({rounds} rounds)"
+            f"Agent mode enabled for next message ({rounds} rounds). "
+            "Type your message to start."
         )
 
     def _handle_skill(self, arg: str) -> None:
@@ -331,11 +334,30 @@ class ReplSession:
             self._client.close()
 
     def _send_message(self, text: str) -> None:
-        """Send a message to the AI."""
+        """Send a message to the AI, using agent loop if enabled."""
         try:
             client = self._get_client()
         except AuthError as e:
             self._display.print_error(str(e))
+            return
+
+        # Agent mode
+        if self._agent_rounds > 0:
+            from genai_cli.agent import AgentLoop
+
+            agent = AgentLoop(
+                self._config, client, self._display,
+                self._token_tracker, self._session,
+                auto_apply=self._auto_apply,
+                max_rounds=self._agent_rounds,
+            )
+            files = list(self._queued_files) if self._queued_files else None
+            self._queued_files.clear()
+            agent.run(
+                text, self._model_name, files=files,
+                system_prompt=self._config.get_system_prompt(),
+            )
+            self._agent_rounds = 0
             return
 
         session_id = self._session["session_id"]
@@ -376,6 +398,18 @@ class ReplSession:
             return
 
         self._display.print_message(full_text, role="assistant")
+
+        # Parse and apply code blocks from response
+        from genai_cli.applier import ResponseParser
+
+        parser = ResponseParser()
+        blocks = parser.parse(full_text)
+        if blocks:
+            from genai_cli.applier import FileApplier
+
+            applier = FileApplier(self._config, self._display)
+            mode = "auto" if self._auto_apply else "confirm"
+            applier.apply_all(blocks, mode)
 
         # Track tokens
         if chat_msg and chat_msg.tokens_consumed:

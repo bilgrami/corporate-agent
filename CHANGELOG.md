@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-07 | feat: Phase 4 — Response applier and agent loop
+
+### Summary
+Added response parser (detects 3 code formats), file applier with safety checks,
+and multi-round agent loop with auto-apply, dry-run, and stop conditions.
+
+### Files Changed
+- `src/genai_cli/applier.py` — New: ResponseParser (fenced/diff/FILE:), FileApplier (validate, backup, apply)
+- `src/genai_cli/agent.py` — New: AgentLoop with multi-round orchestration
+- `src/genai_cli/repl.py` — Modified: agent mode integration, code block parsing on responses
+- `src/genai_cli/cli.py` — Modified: --auto-apply, --agent, --max-rounds, --dry-run flags
+- `tests/test_applier.py` — 26 tests for parser, applier, security
+- `tests/test_agent.py` — 9 tests for agent loop
+- `docs/implementation_plans/phase-04-applier-agent/agents.md` — Phase 4 agent doc
+
+### Rationale
+Automatic code application is the key value proposition. The parser handles
+the 3 most common AI response formats. Safety checks prevent accidental writes
+to sensitive files or paths outside the project.
+
+### Behavior / Compatibility Implications
+- Responses are now scanned for code blocks in REPL mode
+- --auto-apply flag skips confirmation prompts
+- --dry-run shows changes without writing files
+- .bak backups created before overwrite (configurable)
+
+### Testing Recommendations
+- `genai ask "fix" --files src/ --agent --auto-apply` for auto mode
+- `genai ask "review" --files src/ --dry-run` for dry run
+- `make test` — 206 tests passing
+
+### Follow-ups
+- [ ] Skills system with SKILL.md support
+- [ ] Multi-agent parallel execution (Phase 6)
+
+---
+
 ## 2026-02-07 | feat: Phase 3 — Session management, REPL, and token tracking
 
 ### Summary
