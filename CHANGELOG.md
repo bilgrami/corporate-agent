@@ -4,6 +4,82 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-07 | feat: Phase 6 — SEARCH/REPLACE block parser with error feedback
+
+### Summary
+Replaced fragile regex-based ResponseParser with a robust SEARCH/REPLACE block
+parser using Aider-style git-conflict markers. Old parsers kept as fallback.
+Agent loop now feeds back actual file content when edits fail, enabling AI
+self-correction. Three-tier matching (exact, whitespace-normalized,
+indent-normalized) handles common LLM quoting errors.
+
+### Files Changed
+- `src/genai_cli/applier.py` -- Added SearchReplaceParser (state-machine),
+  UnifiedParser (orchestrator), EditBlock, ApplyResult; kept ResponseParser as
+  fallback; added apply_edits() with 3-tier matching
+- `src/genai_cli/agent.py` -- Updated to use UnifiedParser, added error
+  feedback in next-round messages via _build_feedback_message(), added
+  failed_edits tracking to RoundResult/AgentResult
+- `src/genai_cli/repl.py` -- Updated _send_message() to use UnifiedParser
+- `config/system_prompt.yaml` -- Replaced code format instructions with
+  SEARCH/REPLACE block specification
+- `tests/test_search_replace.py` -- New: 36 tests for parser, matching, apply
+- `tests/test_agent.py` -- Added 5 tests for error feedback and SR parsing
+- `tests/test_applier.py` -- Updated for new ApplyResult return type
+- `docs/PRD.md` -- Updated Sections 9.2 and 11.1
+- `docs/TDD.md` -- New: technical design document for SEARCH/REPLACE system
+- `docs/CONTRIBUTING.md` -- Added applier architecture section
+- `docs/Architecture.md` -- Updated module responsibilities
+- `AGENTS.md` -- Updated dependency graph
+
+### Rationale
+The regex-based parser was fragile: fenced patterns failed on nested code blocks,
+unified diff parsing did not verify context lines, and the FILE: marker had
+false-positive issues. SEARCH/REPLACE blocks use unambiguous git-conflict markers
+that LLMs produce reliably, support surgical edits without repeating entire files,
+and are self-validating (SEARCH content must exist in the file).
+
+### Behavior / Compatibility Implications
+- SEARCH/REPLACE is now the primary format; old formats still work as fallback
+- Agent loop now provides error feedback when edits fail (previously silent)
+- `apply_all()` return type changed from `list[str]` to `list[ApplyResult]`
+
+### Testing Recommendations
+- `make test` -- 280 tests passing, 81% coverage
+- Test with AI responses containing SEARCH/REPLACE blocks
+- Test fallback: send response with old fenced format, verify it still works
+- Test error feedback: send SEARCH block with wrong content, verify AI gets
+  actual file content in next round
+
+### Follow-ups
+- [ ] Diff preview for SEARCH/REPLACE blocks in confirm mode
+- [ ] File rename/move operations
+- [ ] Multi-agent parallel execution (Phase 7)
+
+---
+
+## 2026-02-07 | feat: Slash command autocomplete in REPL
+
+### Summary
+Added tab-completion for all 18 slash commands in the interactive REPL.
+Typing `/` and pressing Tab shows all commands with descriptions. Commands
+that accept arguments (`/model`, `/skill`, `/auto-apply`, `/files`, `/resume`)
+provide context-aware sub-completions (model names, skill names, file paths, etc.).
+
+### Files Changed
+- `src/genai_cli/repl.py` — Added `SlashCompleter` class using prompt_toolkit's `Completer`; wired into `PromptSession`
+- `tests/test_repl.py` — Added `TestSlashCompleter` with 6 tests
+
+### Rationale
+Users had to memorize commands or type `/help`. Autocomplete matches the
+experience of Claude Code and other modern CLI tools.
+
+### Testing Recommendations
+- `make test` — 275 tests passing, 81% coverage
+- Launch `genai` REPL, type `/` then Tab to verify completions appear
+
+---
+
 ## 2026-02-07 | fix+docs: Code cleanup and documentation improvements
 
 ### Summary

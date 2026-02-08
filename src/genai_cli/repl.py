@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterable
 from typing import Any
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.completion import CompleteEvent, Completer, Completion
+from prompt_toolkit.completion import PathCompleter as _PathCompleter
+from prompt_toolkit.document import Document
 from prompt_toolkit.history import InMemoryHistory
 
 from genai_cli import __version__
@@ -18,6 +22,106 @@ from genai_cli.models import ChatMessage
 from genai_cli.session import SessionManager
 from genai_cli.streaming import stream_or_complete
 from genai_cli.token_tracker import TokenTracker
+
+
+class SlashCompleter(Completer):
+    """Autocomplete for REPL slash commands and their arguments."""
+
+    COMMANDS: dict[str, str] = {
+        "/help": "Show available commands",
+        "/model": "Show or switch model",
+        "/models": "List all available models",
+        "/files": "Queue files for next message",
+        "/clear": "Clear session, start fresh",
+        "/fresh": "Alias for /clear",
+        "/compact": "Summarize to reduce tokens",
+        "/history": "List saved sessions",
+        "/resume": "Resume a saved session",
+        "/usage": "Show token usage",
+        "/status": "Show session status",
+        "/config": "View or update settings",
+        "/auto-apply": "Toggle auto-apply mode",
+        "/agent": "Enable agent mode",
+        "/skill": "Invoke a skill",
+        "/skills": "List available skills",
+        "/quit": "Save session and exit",
+        "/q": "Alias for /quit",
+    }
+
+    def __init__(
+        self,
+        config: ConfigManager,
+        session_mgr: SessionManager,
+    ) -> None:
+        self._config = config
+        self._session_mgr = session_mgr
+        self._path_completer = _PathCompleter()
+
+    def get_completions(
+        self, document: Document, complete_event: CompleteEvent
+    ) -> Iterable[Completion]:
+        text = document.text_before_cursor
+
+        if not text.startswith("/"):
+            return
+
+        # No space yet — complete the command name
+        if " " not in text:
+            for cmd, desc in self.COMMANDS.items():
+                if cmd.startswith(text):
+                    yield Completion(
+                        cmd, start_position=-len(text), display_meta=desc
+                    )
+            return
+
+        # Has a space — complete arguments for specific commands
+        cmd, _, arg_text = text.partition(" ")
+        cmd = cmd.lower()
+
+        if cmd == "/model":
+            for name in self._config.get_all_models():
+                if name.startswith(arg_text):
+                    yield Completion(name, start_position=-len(arg_text))
+
+        elif cmd == "/auto-apply":
+            for opt in ("on", "off"):
+                if opt.startswith(arg_text):
+                    yield Completion(opt, start_position=-len(arg_text))
+
+        elif cmd == "/skill":
+            try:
+                from genai_cli.skills.registry import SkillRegistry
+
+                registry = SkillRegistry(self._config)
+                for s in registry.list_skills():
+                    if s.name.startswith(arg_text):
+                        yield Completion(
+                            s.name,
+                            start_position=-len(arg_text),
+                            display_meta=s.description.strip()[:40],
+                        )
+            except Exception:
+                pass
+
+        elif cmd == "/files":
+            sub_doc = Document(arg_text, len(arg_text))
+            yield from self._path_completer.get_completions(
+                sub_doc, complete_event
+            )
+
+        elif cmd == "/resume":
+            try:
+                for s in self._session_mgr.list_sessions():
+                    sid = s["session_id"]
+                    if sid.startswith(arg_text):
+                        model = s.get("model_name", "")
+                        yield Completion(
+                            sid,
+                            start_position=-len(arg_text),
+                            display_meta=model,
+                        )
+            except Exception:
+                pass
 
 
 class ReplSession:
@@ -74,8 +178,10 @@ class ReplSession:
         self._display.print_welcome(__version__, model_display, context_window)
         self._running = True
 
+        completer = SlashCompleter(self._config, self._session_mgr)
         prompt_session: PromptSession[str] = PromptSession(
-            history=InMemoryHistory()
+            history=InMemoryHistory(),
+            completer=completer,
         )
 
         while self._running:
@@ -428,16 +534,27 @@ class ReplSession:
         self._display.print_message(full_text, role="assistant")
 
         # Parse and apply code blocks from response
-        from genai_cli.applier import ResponseParser
+        from genai_cli.applier import FileApplier, UnifiedParser
 
-        parser = ResponseParser()
-        blocks = parser.parse(full_text)
-        if blocks:
-            from genai_cli.applier import FileApplier
+        parser = UnifiedParser()
+        edits, legacy_blocks = parser.parse(full_text)
+        applier = FileApplier(self._config, self._display)
+        mode = "auto" if self._auto_apply else "confirm"
 
-            applier = FileApplier(self._config, self._display)
-            mode = "auto" if self._auto_apply else "confirm"
-            applier.apply_all(blocks, mode)
+        if edits:
+            results = applier.apply_edits(edits, mode)
+            applied = [r for r in results if r.success]
+            failed = [r for r in results if not r.success]
+            if applied:
+                self._display.print_success(
+                    f"Applied {len(applied)} edit(s)"
+                )
+            for f in failed:
+                self._display.print_error(
+                    f"Failed: {f.file_path}: {f.error_message}"
+                )
+        elif legacy_blocks:
+            applier.apply_all(legacy_blocks, mode)
 
         # Track tokens
         if chat_msg and chat_msg.tokens_consumed:

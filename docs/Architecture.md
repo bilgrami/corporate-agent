@@ -49,7 +49,7 @@
 | `bundler.py` | FileBundler | File discovery, classification by type, bundling with markers |
 | `session.py` | SessionManager | Create/save/load/list/compact sessions as JSON |
 | `token_tracker.py` | TokenTracker | Track consumed tokens, thresholds, model switching |
-| `applier.py` | ResponseParser, FileApplier | Parse 3 code formats, validate paths, apply with safety |
+| `applier.py` | SearchReplaceParser, UnifiedParser, ResponseParser, FileApplier | Parse SEARCH/REPLACE blocks (primary) + 3 legacy formats (fallback), validate paths, apply with safety |
 | `agent.py` | AgentLoop | Multi-round: upload, prompt, parse, apply, repeat |
 | `skills/loader.py` | SkillLoader | Parse SKILL.md frontmatter + body, 3-tier loading |
 | `skills/registry.py` | SkillRegistry | Discover skills from 3 locations, priority override |

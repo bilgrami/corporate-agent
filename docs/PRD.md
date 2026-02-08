@@ -701,35 +701,44 @@ PUT /api/v1/conversation/{id}/document/upload  ← notebooks bundle
 
 ### 9.2 Response Applier
 
-The applier detects **three formats automatically**:
+The applier uses **SEARCH/REPLACE blocks** as the primary edit format, with
+legacy formats as fallback.
 
-**Format 1: Fenced code blocks with file path**
-````
-```python:src/main.py
-def fixed_function():
-    ...
-```
-````
-→ Replaces entire file content
+**Primary Format: SEARCH/REPLACE blocks**
 
-**Format 2: Unified diff**
 ```
---- a/src/main.py
-+++ b/src/main.py
-@@ -42,3 +42,5 @@
--    result = query(data_source)
-+    if data_source is None:
-+        raise ValueError("data_source required")
-+    result = query(data_source)
+path/to/file.py
+<<<<<<< SEARCH
+exact existing content to find
+=======
+new content to replace with
+>>>>>>> REPLACE
 ```
-→ Applies patch to existing file
 
-**Format 3: Explicit file markers**
-```
-FILE: src/main.py
-<complete file content>
-```
-→ Replaces entire file content
+Operations:
+- **Create file**: Empty SEARCH section (nothing between `<<<<<<< SEARCH` and `=======`)
+- **Edit file**: SEARCH content must exist exactly in the file
+- **Delete content**: Empty REPLACE section
+- **Multiple edits**: Repeat blocks with the same file path
+
+Why this format:
+- Markers `<<<<<<< SEARCH`, `=======`, `>>>>>>> REPLACE` never appear in real code
+- No escaping needed (unlike XML/JSON)
+- LLMs know git conflict markers from training data
+- Self-validating: SEARCH content must exist in the file
+- Surgical edits without repeating entire files
+
+**Error Feedback**: When a SEARCH block does not match the file content, the
+agent loop feeds back the actual file content to the AI so it can self-correct
+in the next round.
+
+**Fallback Formats** (used only if no SEARCH/REPLACE blocks found):
+
+1. Fenced code block with file path: `` ```language:path/to/file.ext ``
+2. Unified diff format with `--- a/` and `+++ b/` headers
+3. Complete file content with `FILE: path/to/file.ext` marker
+
+See [TDD.md](TDD.md) for technical details on the parser and matching engine.
 
 ### 9.3 Apply Modes
 
@@ -959,12 +968,27 @@ system_prompt: |
     - Follow-ups
 
   ## Response Format for Code Changes
-  When providing code changes, use one of these formats:
-  1. Fenced code block with file path: ```language:path/to/file.ext
-  2. Unified diff format with --- a/ and +++ b/ headers
-  3. Complete file content with FILE: path/to/file.ext marker
+  When you need to create or edit files, use SEARCH/REPLACE blocks.
 
-  Always include the relative file path so changes can be applied automatically.
+  Every SEARCH/REPLACE block must start with the relative file path on its own
+  line, followed by the markers:
+
+  path/to/file.py
+  <<<<<<< SEARCH
+  exact existing content to find in the file
+  =======
+  new content to replace it with
+  >>>>>>> REPLACE
+
+  Rules:
+  - The SEARCH section must contain an EXACT copy of the existing file content
+    you want to change. Copy it character-for-character including whitespace.
+  - To CREATE a new file, use an empty SEARCH section.
+  - To DELETE content, use an empty REPLACE section.
+  - For multiple edits to the same file, use multiple SEARCH/REPLACE blocks.
+  - Always include the relative file path so changes can be applied automatically.
+  - Keep SEARCH blocks as small as possible — just enough context for a unique match.
+  - Order SEARCH/REPLACE blocks from top of file to bottom for multiple edits.
 
 # The agent_name is substituted from settings.yaml at runtime
 # This name must never appear in generated code, commits, or changelogs

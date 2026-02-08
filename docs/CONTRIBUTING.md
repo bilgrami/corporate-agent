@@ -96,6 +96,41 @@ See [PRD.md](PRD.md) for full requirements and API documentation.
 
 Each source module should have a corresponding `tests/test_<module>.py`.
 
+## Applier Architecture
+
+The response applier system lives in `src/genai_cli/applier.py` and handles
+converting AI responses into file changes.
+
+**Key classes:**
+
+| Class | Purpose |
+|-------|---------|
+| `SearchReplaceParser` | Parses SEARCH/REPLACE blocks (primary format) |
+| `ResponseParser` | Legacy regex parser (fenced, diff, FILE: formats) |
+| `UnifiedParser` | Tries SEARCH/REPLACE first, falls back to legacy |
+| `FileApplier` | Applies edits with safety checks (path validation, backups, git dirty) |
+| `EditBlock` | Dataclass for SEARCH/REPLACE operations |
+| `CodeBlock` | Dataclass for legacy format operations |
+| `ApplyResult` | Result of applying one edit (success/failure + error message) |
+
+**Adding a new response format:**
+
+1. Create a parser class with a `parse(response: str) -> list[...]` method
+2. Add it to `UnifiedParser` with appropriate priority
+3. Add an apply method to `FileApplier`
+4. Add tests in `tests/test_search_replace.py` or a new test file
+5. Update the system prompt in `config/system_prompt.yaml`
+
+**How matching works:**
+
+SEARCH content is matched against file content using three tiers:
+1. Exact match
+2. Whitespace-normalized (trailing whitespace stripped per line)
+3. Indent-normalized (leading whitespace stripped per line)
+
+If all three fail, an error is returned with actual file content for AI
+self-correction in the next agent round. See [TDD.md](TDD.md) for details.
+
 ## Code Style
 
 - Type hints on all public functions

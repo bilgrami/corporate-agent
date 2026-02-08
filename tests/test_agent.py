@@ -9,7 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from genai_cli.agent import AgentLoop, AgentResult
+from genai_cli.agent import AgentLoop, AgentResult, RoundResult
+from genai_cli.applier import ApplyResult
 from genai_cli.config import ConfigManager
 from genai_cli.display import Display
 from genai_cli.session import SessionManager
@@ -259,3 +260,163 @@ class TestAgentLoop:
         assert "You are helpful." in prompt
         assert "Review for bugs." in prompt
         assert "fix bugs" in prompt
+
+    def test_search_replace_parsed_and_applied(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+        tmp_path: Path,
+    ) -> None:
+        """Agent should parse SEARCH/REPLACE blocks from AI response."""
+        # Create a file for the edit to target
+        target = tmp_path / "fix_me.py"
+        target.write_text("def broken():\n    pass\n")
+
+        sr_response = (
+            "Here is the fix:\n\n"
+            "fix_me.py\n"
+            "<<<<<<< SEARCH\n"
+            "def broken():\n"
+            "    pass\n"
+            "=======\n"
+            "def fixed():\n"
+            "    return True\n"
+            ">>>>>>> REPLACE\n"
+        )
+        mock_client.create_chat.return_value = {
+            "SessionId": session["session_id"],
+            "Message": sr_response,
+            "UserOrBot": "assistant",
+            "TokensConsumed": 50,
+            "TokenCost": 0.001,
+            "ModelName": "gpt-5",
+            "DisplayName": "GPT-5",
+            "TimestampUTC": "2026-02-07T12:00:00Z",
+        }
+        mock_client.parse_message.return_value = MagicMock(
+            content=sr_response,
+            tokens_consumed=50,
+            token_cost=0.001,
+        )
+
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+            auto_apply=True, max_rounds=1,
+        )
+        # Override project root so the applier finds the file
+        agent._applier._project_root = tmp_path
+        result = agent.run("fix the bug", "gpt-5")
+        assert len(result.rounds) == 1
+        assert result.rounds[0].had_actions
+
+
+class TestAgentFeedback:
+    def test_feedback_message_with_failures(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+        )
+        rr = RoundResult(
+            round_number=1,
+            files_applied=["a.py"],
+            failed_edits=[
+                ApplyResult(
+                    file_path="b.py",
+                    success=False,
+                    error_message="SEARCH block not found",
+                    file_content_snippet="def hello():\n    pass",
+                )
+            ],
+        )
+        msg = agent._build_feedback_message(rr)
+        assert "Successfully applied" in msg
+        assert "a.py" in msg
+        assert "FAILED" in msg
+        assert "b.py" in msg
+        assert "def hello" in msg
+        assert "retry" in msg.lower()
+
+    def test_feedback_message_all_success(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+        )
+        rr = RoundResult(
+            round_number=1,
+            files_applied=["a.py", "b.py"],
+            failed_edits=[],
+        )
+        msg = agent._build_feedback_message(rr)
+        assert "Successfully applied" in msg
+        assert "remaining tasks" in msg.lower()
+        assert "FAILED" not in msg
+
+    def test_feedback_message_no_actions(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+        )
+        rr = RoundResult(round_number=1)
+        msg = agent._build_feedback_message(rr)
+        assert "Continue with next steps" in msg
+
+    def test_agent_result_tracks_failed_edits(
+        self,
+        agent_config: ConfigManager,
+        mock_client: MagicMock,
+        display: Display,
+        tracker: TokenTracker,
+        session: dict,
+    ) -> None:
+        """Agent should track failed edits when SEARCH doesn't match."""
+        sr_response = (
+            "nonexistent.py\n"
+            "<<<<<<< SEARCH\n"
+            "this does not exist\n"
+            "=======\n"
+            "replacement\n"
+            ">>>>>>> REPLACE\n"
+        )
+        mock_client.create_chat.return_value = {
+            "SessionId": session["session_id"],
+            "Message": sr_response,
+            "UserOrBot": "assistant",
+            "TokensConsumed": 50,
+            "TokenCost": 0.001,
+            "ModelName": "gpt-5",
+            "DisplayName": "GPT-5",
+            "TimestampUTC": "2026-02-07T12:00:00Z",
+        }
+        mock_client.parse_message.return_value = MagicMock(
+            content=sr_response,
+            tokens_consumed=50,
+            token_cost=0.001,
+        )
+
+        agent = AgentLoop(
+            agent_config, mock_client, display, tracker, session,
+            auto_apply=True, max_rounds=1,
+        )
+        result = agent.run("fix", "gpt-5")
+        assert result.total_failed_edits > 0

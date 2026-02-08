@@ -45,6 +45,8 @@ session.py         -> config.py, models.py
 token_tracker.py   -> config.py, models.py
 bundler.py         -> config.py, models.py
 applier.py         -> config.py, display.py
+  Classes: SearchReplaceParser, UnifiedParser, ResponseParser, FileApplier
+  Data: EditBlock, CodeBlock, ApplyResult
 display.py         -> models.py
 streaming.py       -> client.py, config.py, models.py, display.py
 models.py          -> (no internal deps, pure data classes)

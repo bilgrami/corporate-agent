@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from genai_cli.applier import CodeBlock, FileApplier, ResponseParser
+from genai_cli.applier import ApplyResult, CodeBlock, FileApplier, ResponseParser
 from genai_cli.config import ConfigManager
 from genai_cli.display import Display
 
@@ -261,8 +261,9 @@ class TestApplyAll:
             CodeBlock(file_path="a.py", content="a content\n"),
             CodeBlock(file_path="b.py", content="b content\n"),
         ]
-        applied = applier.apply_all(blocks, mode="auto")
-        assert len(applied) == 2
+        results = applier.apply_all(blocks, mode="auto")
+        assert len(results) == 2
+        assert all(r.success for r in results)
         assert (tmp_path / "a.py").is_file()
         assert (tmp_path / "b.py").is_file()
 
@@ -273,8 +274,9 @@ class TestApplyAll:
             CodeBlock(file_path="good.py", content="good\n"),
             CodeBlock(file_path="../../bad.py", content="bad\n"),
         ]
-        applied = applier.apply_all(blocks, mode="auto")
-        assert applied == ["good.py"]
+        results = applier.apply_all(blocks, mode="auto")
+        succeeded = [r.file_path for r in results if r.success]
+        assert succeeded == ["good.py"]
 
 
 class TestPreviewChanges:

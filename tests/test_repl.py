@@ -10,9 +10,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from prompt_toolkit.completion import CompleteEvent
+from prompt_toolkit.document import Document
+
 from genai_cli.config import ConfigManager
 from genai_cli.display import Display
-from genai_cli.repl import ReplSession
+from genai_cli.repl import ReplSession, SlashCompleter
 
 
 @pytest.fixture
@@ -156,3 +159,49 @@ class TestReplCommands:
     def test_resume_no_arg(self, repl: ReplSession) -> None:
         repl._handle_command("/resume")
         # Should print usage
+
+
+class TestSlashCompleter:
+    """Tests for slash command autocomplete."""
+
+    @pytest.fixture
+    def completer(self, repl_config: ConfigManager) -> SlashCompleter:
+        from genai_cli.session import SessionManager
+
+        return SlashCompleter(repl_config, SessionManager(repl_config))
+
+    def _complete(self, completer: SlashCompleter, text: str) -> list[str]:
+        doc = Document(text, len(text))
+        return [c.text for c in completer.get_completions(doc, CompleteEvent())]
+
+    def test_slash_returns_all_commands(self, completer: SlashCompleter) -> None:
+        results = self._complete(completer, "/")
+        assert len(results) == len(SlashCompleter.COMMANDS)
+        assert "/help" in results
+        assert "/quit" in results
+
+    def test_partial_command(self, completer: SlashCompleter) -> None:
+        results = self._complete(completer, "/mo")
+        assert "/model" in results
+        assert "/models" in results
+        assert "/help" not in results
+
+    def test_model_subcompletions(self, completer: SlashCompleter) -> None:
+        results = self._complete(completer, "/model ")
+        assert "gpt-5-chat-global" in results
+        assert "claude-sonnet-4-5-global" in results
+
+    def test_auto_apply_subcompletions(self, completer: SlashCompleter) -> None:
+        results = self._complete(completer, "/auto-apply ")
+        assert results == ["on", "off"]
+
+    def test_no_completions_without_slash(self, completer: SlashCompleter) -> None:
+        results = self._complete(completer, "hello")
+        assert results == []
+
+    def test_command_meta_text(self, completer: SlashCompleter) -> None:
+        doc = Document("/he", 3)
+        completions = list(completer.get_completions(doc, CompleteEvent()))
+        assert len(completions) == 1
+        assert completions[0].text == "/help"
+        assert completions[0].display_meta is not None

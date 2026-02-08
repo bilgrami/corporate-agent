@@ -1,11 +1,11 @@
-"""Agent loop: orchestrate bundle → upload → prompt → response → apply → repeat."""
+"""Agent loop: orchestrate bundle -> upload -> prompt -> response -> apply -> repeat."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
 
-from genai_cli.applier import FileApplier, ResponseParser
+from genai_cli.applier import ApplyResult, FileApplier, UnifiedParser
 from genai_cli.auth import AuthError
 from genai_cli.bundler import FileBundler
 from genai_cli.client import GenAIClient
@@ -24,6 +24,7 @@ class RoundResult:
     round_number: int
     response: str = ""
     files_applied: list[str] = field(default_factory=list)
+    failed_edits: list[ApplyResult] = field(default_factory=list)
     tokens_consumed: int = 0
     had_actions: bool = False
 
@@ -35,11 +36,12 @@ class AgentResult:
     rounds: list[RoundResult] = field(default_factory=list)
     total_files_applied: list[str] = field(default_factory=list)
     total_tokens: int = 0
+    total_failed_edits: int = 0
     stop_reason: str = ""
 
 
 class AgentLoop:
-    """Multi-round agent: prompt → response → parse → apply → repeat."""
+    """Multi-round agent: prompt -> response -> parse -> apply -> repeat."""
 
     def __init__(
         self,
@@ -61,7 +63,7 @@ class AgentLoop:
         self._auto_apply = auto_apply
         self._dry_run = dry_run
         self._max_rounds = max_rounds
-        self._parser = ResponseParser()
+        self._parser = UnifiedParser()
         self._applier = FileApplier(config, display)
         self._bundler = FileBundler(config)
         self._session_mgr = SessionManager(config)
@@ -125,6 +127,7 @@ class AgentLoop:
             result.rounds.append(round_result)
             result.total_tokens += round_result.tokens_consumed
             result.total_files_applied.extend(round_result.files_applied)
+            result.total_failed_edits += len(round_result.failed_edits)
 
             if not round_result.had_actions:
                 result.stop_reason = "no_actions"
@@ -134,15 +137,8 @@ class AgentLoop:
                 result.stop_reason = "max_rounds"
                 break
 
-            # Prepare next round message
-            applied = round_result.files_applied
-            if applied:
-                current_message = (
-                    f"Applied changes to: {', '.join(applied)}. "
-                    "Continue with any remaining tasks."
-                )
-            else:
-                current_message = "Continue with next steps."
+            # Prepare next round message with error feedback
+            current_message = self._build_feedback_message(round_result)
 
         # Summary
         total_files = len(set(result.total_files_applied))
@@ -151,6 +147,10 @@ class AgentLoop:
             f"\nAgent completed: {total_rounds} rounds, "
             f"{total_files} files modified"
         )
+        if result.total_failed_edits:
+            self._display.print_warning(
+                f"{result.total_failed_edits} edit(s) failed"
+            )
         self._display.print_info(f"Stop reason: {result.stop_reason}")
 
         return result
@@ -186,13 +186,21 @@ class AgentLoop:
             )
             self._session_mgr.add_message(self._session, chat_msg)
 
-        # Parse for code blocks
-        blocks = self._parser.parse(full_text)
-        if blocks:
+        # Parse for SEARCH/REPLACE blocks (preferred) or legacy blocks
+        edits, legacy_blocks = self._parser.parse(full_text)
+
+        if edits:
             rr.had_actions = True
             mode = self._get_apply_mode()
-            applied = self._applier.apply_all(blocks, mode)
-            rr.files_applied = applied
+            results = self._applier.apply_edits(edits, mode)
+            rr.files_applied = [r.file_path for r in results if r.success]
+            rr.failed_edits = [r for r in results if not r.success]
+        elif legacy_blocks:
+            rr.had_actions = True
+            mode = self._get_apply_mode()
+            results = self._applier.apply_all(legacy_blocks, mode)
+            rr.files_applied = [r.file_path for r in results if r.success]
+            rr.failed_edits = [r for r in results if not r.success]
 
         # Show token status
         usage = self._tracker.to_usage()
@@ -200,13 +208,48 @@ class AgentLoop:
 
         return rr
 
+    def _build_feedback_message(self, round_result: RoundResult) -> str:
+        """Build the next-round message with success/failure feedback."""
+        parts: list[str] = []
+
+        applied = round_result.files_applied
+        failed = round_result.failed_edits
+
+        if applied:
+            parts.append(
+                f"Successfully applied changes to: {', '.join(applied)}."
+            )
+
+        if failed:
+            for f in failed:
+                parts.append(
+                    f"FAILED to apply edit to {f.file_path}: {f.error_message}"
+                )
+                if f.file_content_snippet:
+                    parts.append(
+                        f"Current content of {f.file_path}:\n"
+                        f"```\n{f.file_content_snippet}\n```"
+                    )
+            parts.append(
+                "Please retry the failed edits with corrected SEARCH content "
+                "that exactly matches the current file content shown above."
+            )
+
+        if not applied and not failed:
+            parts.append("Continue with next steps.")
+
+        if applied and not failed:
+            parts.append("Continue with any remaining tasks.")
+
+        return "\n\n".join(parts)
+
     def _build_full_prompt(
         self,
         user_message: str,
         system_prompt: str = "",
         skill_prompt: str = "",
     ) -> str:
-        """Build the full prompt with system → skill → user message."""
+        """Build the full prompt with system -> skill -> user message."""
         parts: list[str] = []
         if system_prompt:
             parts.append(system_prompt)
