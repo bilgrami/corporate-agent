@@ -4,7 +4,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "Cleaning build artifacts..."
+echo "Cleaning build artifacts and virtual environment..."
+rm -rf "$PROJECT_ROOT/.venv"
 rm -rf "$PROJECT_ROOT/dist"
 rm -rf "$PROJECT_ROOT/build"
 rm -rf "$PROJECT_ROOT/src"/*.egg-info

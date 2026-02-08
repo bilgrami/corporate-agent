@@ -54,6 +54,42 @@ Always run `make lint && make test` before submitting changes.
 See [Architecture.md](Architecture.md) for component diagrams and data flow.
 See [PRD.md](PRD.md) for full requirements and API documentation.
 
+## How File Context Works
+
+The CLI does **not** automatically read or attach your repository. Files are
+provided to the AI only when you explicitly queue them:
+
+| Method | Example |
+|--------|---------|
+| REPL | `/files src/` then type your message |
+| One-shot | `genai ask "review" --files src/ --type code` |
+| Skill | `/skill review` (uses queued files) |
+| Agent | `/agent 5` then type message (uses queued files) |
+
+### What happens under the hood
+
+1. **Discover** — `FileBundler` (`src/genai_cli/bundler.py`) walks the paths
+   you specified, classifies each file by type (code / docs / scripts /
+   notebooks), and skips binary files, `.env`, `__pycache__`, etc.
+2. **Bundle** — Files are concatenated per type with `===== FILE: /path =====`
+   markers. Each bundle is a single string.
+3. **Upload** — Each bundle is uploaded as a separate PUT request via
+   `GenAIClient.upload_bundles()` (`src/genai_cli/client.py`). The API
+   associates the documents with your session server-side.
+4. **Prompt** — Your chat message is sent as a POST. The AI can reference
+   the uploaded file context from the session.
+
+Files are **not** stuffed into the prompt text. They live server-side in the
+session after upload.
+
+### Size and exclusion controls
+
+- Max file size per type is configured in `config/settings.yaml`
+  (`file_types.<type>.max_file_size_kb`)
+- Exclude patterns (globs) are in `config/settings.yaml` under
+  `exclude_patterns`
+- Binary files are auto-detected and excluded
+
 ## Adding Features
 
 ### Adding a New CLI Command
