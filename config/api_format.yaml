@@ -25,6 +25,7 @@ api_format:
   # Content type for POST/PUT endpoints (default: application/json)
   endpoint_content_types:
     stream: "multipart/form-data"
+    document_upload: "multipart/form-data"
 
   # Outbound: internal name -> API field name (for request payloads)
   request_fields:

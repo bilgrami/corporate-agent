@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-08 | fix: 415 upload error and send system prompt after /files
+
+### Summary
+Fixed two issues with `/files`: (1) uploads returned 415 Unsupported Media Type
+because the CLI sent a descriptive filename while the server expects `"blob"`;
+(2) after uploading files no system prompt was sent, so the model had no context
+for SEARCH/REPLACE format. Now the upload uses `filename="blob"` and the system
+prompt is sent automatically after a successful upload, with the model's response
+displayed to the user.
+
+### Files Changed
+- `src/genai_cli/client.py` — Changed default filename to `"blob"` in `upload_document()` and `upload_bundles()`
+- `src/genai_cli/repl.py` — Send system prompt after successful upload in `_handle_files()`; display response and track tokens
+- `config/api_format.yaml` — Added `document_upload: "multipart/form-data"` to `endpoint_content_types`
+- `tests/test_client.py` — Added tests for blob filename
+- `tests/test_repl.py` — Added tests for system prompt after upload and graceful failure handling
+- `CHANGELOG.md` — This entry
+
+### Rationale
+The web client sends `filename="blob"` in multipart uploads; the server validates
+this and rejects other filenames with 415. Without a system prompt after upload,
+follow-up messages produced unformatted responses.
+
+### Behavior / Compatibility Implications
+- `upload_document()` default filename changed from `"upload.txt"` to `"blob"`
+- `upload_bundles()` now passes `"blob"` instead of `"{type}_bundle.txt"`
+- After `/files` upload, the system prompt is sent and the model's response is shown
+- If the system prompt send fails, a warning is shown but the upload is preserved
+
+### Testing Recommendations
+- `pytest tests/test_client.py tests/test_repl.py -v` — new + existing tests pass
+- Full `pytest` — no regressions
+- Manual: `/files src/*.py` → files uploaded without 415 → model responds with acknowledgment
+
+---
+
 ## 2026-02-08 | feat: Immediate file upload, session reuse, and web UI visibility
 
 ### Summary

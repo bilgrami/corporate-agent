@@ -491,3 +491,49 @@ class TestFilesQuotedPaths:
         repl._handle_command(f"/files {tmp_path}/*.py")
         # Files are uploaded immediately
         assert mock_client.upload_bundles.called
+
+
+class TestFilesSystemPrompt:
+    """Tests for system prompt sent after /files upload."""
+
+    def test_files_sends_system_prompt_after_upload(
+        self, repl: ReplSession, sample_project_dir: Path, display: Display
+    ) -> None:
+        """After upload, stream_or_complete is called with the system prompt."""
+        mock_client = MagicMock()
+        repl._client = mock_client
+
+        fake_msg = MagicMock()
+        fake_msg.tokens_consumed = 100
+        fake_msg.token_cost = 0.01
+
+        with patch("genai_cli.repl.stream_or_complete", return_value=("Acknowledged", fake_msg)) as mock_stream:
+            repl._handle_command(f"/files {sample_project_dir / 'src'}")
+            assert mock_client.upload_bundles.called
+            # stream_or_complete should have been called with the system prompt
+            assert mock_stream.called
+            call_args = mock_stream.call_args
+            prompt_arg = call_args[0][1]  # second positional arg is the message
+            system_prompt = repl._config.get_system_prompt()
+            assert prompt_arg == system_prompt
+
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Acknowledged" in output
+
+    def test_files_system_prompt_failure_is_warning(
+        self, repl: ReplSession, sample_project_dir: Path, display: Display
+    ) -> None:
+        """If sending system prompt fails, upload still succeeds with a warning."""
+        mock_client = MagicMock()
+        repl._client = mock_client
+
+        with patch(
+            "genai_cli.repl.stream_or_complete",
+            side_effect=Exception("connection lost"),
+        ):
+            repl._handle_command(f"/files {sample_project_dir / 'src'}")
+            assert mock_client.upload_bundles.called
+
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Files uploaded" in output
+        assert "Context init failed" in output

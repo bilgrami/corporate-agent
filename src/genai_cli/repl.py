@@ -366,6 +366,27 @@ class ReplSession:
             self._display.print_success("Files uploaded")
         except Exception as e:
             self._display.print_error(f"Upload failed: {e}")
+            return
+
+        # Send system prompt so the AI knows about the uploaded files
+        system_prompt = self._config.get_system_prompt()
+        if system_prompt:
+            try:
+                full_text, chat_msg = stream_or_complete(
+                    client, system_prompt, self._model_name,
+                    session_id, self._config, self._config.settings.streaming,
+                )
+                self._display.print_message(full_text, role="assistant")
+                if chat_msg and chat_msg.tokens_consumed:
+                    self._token_tracker.add_consumed(
+                        chat_msg.tokens_consumed, chat_msg.token_cost
+                    )
+                usage = self._token_tracker.to_usage()
+                self._display.print_token_status(usage)
+            except Exception as e:
+                self._display.print_warning(
+                    f"Context init failed (upload succeeded): {e}"
+                )
 
     def _handle_clear(self) -> None:
         """Clear session and start fresh with a new API session."""

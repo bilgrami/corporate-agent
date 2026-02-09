@@ -251,6 +251,36 @@ class TestGenAIClient:
         assert "T" not in ts
         assert "," in ts
 
+    @respx.mock
+    def test_upload_document_default_filename_is_blob(
+        self, client: GenAIClient
+    ) -> None:
+        """upload_document() uses 'blob' as the default filename."""
+        route = respx.put(
+            "https://api-genai.test.com/api/v1/conversation/s1/document/upload"
+        ).mock(return_value=httpx.Response(200, json={"status": "ok"}))
+        client.upload_document("s1", "content here")
+        request = route.calls[0].request
+        # The multipart body should contain filename="blob"
+        body = request.content.decode("utf-8", errors="replace")
+        assert 'filename="blob"' in body
+
+    @respx.mock
+    def test_upload_bundles_uses_blob_filename(
+        self, client: GenAIClient
+    ) -> None:
+        """upload_bundles() passes 'blob' for each bundle."""
+        route = respx.put(
+            "https://api-genai.test.com/api/v1/conversation/s1/document/upload"
+        ).mock(return_value=httpx.Response(200, json={"status": "ok"}))
+        bundle1 = MagicMock(file_type="code", content="# code")
+        bundle2 = MagicMock(file_type="docs", content="# docs")
+        client.upload_bundles("s1", [bundle1, bundle2])
+        assert route.call_count == 2
+        for call in route.calls:
+            body = call.request.content.decode("utf-8", errors="replace")
+            assert 'filename="blob"' in body
+
     def test_close(self, client: GenAIClient) -> None:
         # Should not raise even if client not initialized
         client.close()
