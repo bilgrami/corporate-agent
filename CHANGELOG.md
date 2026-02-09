@@ -17,6 +17,30 @@ manually running `genai auth login`.
 
 ---
 
+## 2026-02-08 | fix: Session creation tracking for multi-message conversations
+
+### Summary
+Fixed empty responses on follow-up messages and 400 errors on file uploads.
+The client now tracks which sessions have been registered with the API backend.
+The first message in a conversation creates the session; subsequent messages
+skip the creation step and go directly to the stream endpoint.
+
+### Files Changed
+- `src/genai_cli/client.py` — Added `_created_sessions` set to track registered sessions; `stream_chat()` creates session only on first use
+- `tests/test_client.py` — Added test verifying create is called once, skipped on follow-ups
+
+### Behavior / Compatibility Implications
+- First message in a session triggers session creation + stream
+- Follow-up messages skip creation, go straight to stream
+- File uploads now work because the session exists on the backend before upload
+
+### Testing Recommendations
+- `make test` — 347 tests passing, 83% coverage
+- REPL: send first message (creates session), then follow-up (skips create)
+- `/files path` then message — upload succeeds after session is created
+
+---
+
 ## 2026-02-08 | fix: Configurable HTTP methods and multi-step request flows
 
 ### Summary
