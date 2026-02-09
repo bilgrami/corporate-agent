@@ -26,6 +26,7 @@ class GenAIClient:
         self._auth = auth
         self._mapper = config.mapper
         self._client: httpx.Client | None = None
+        self._created_sessions: set[str] = set()
 
     def _get_client(self) -> httpx.Client:
         """Lazily create and return an httpx.Client."""
@@ -146,12 +147,12 @@ class GenAIClient:
     ) -> httpx.Response:
         """Two-step flow: create session entry, then stream the response."""
         client = self._get_client()
-        new_session = session_id is None
         sid = session_id or str(uuid.uuid4())
 
-        # Step 1: Create session entry (only for new conversations)
-        if new_session:
+        # Step 1: Create session entry (first message only)
+        if sid not in self._created_sessions:
             self.create_chat(message, model, sid)
+            self._created_sessions.add(sid)
 
         # Step 2: Stream from the stream endpoint
         content_type = self._mapper.endpoint_content_type("stream")

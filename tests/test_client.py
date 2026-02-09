@@ -115,6 +115,27 @@ class TestGenAIClient:
         assert request.method == "POST"
 
     @respx.mock
+    def test_stream_chat_skips_create_on_followup(self, client: GenAIClient) -> None:
+        """Second stream_chat call with same session_id skips create."""
+        import json
+
+        create_route = respx.get("https://api-genai.test.com/api/v1/chathistory/create").mock(
+            return_value=httpx.Response(200, json={"status": "created"})
+        )
+        stream_body = json.dumps({"Task": "Intermediate", "Steps": [{"data": "Hi"}], "Message": "Hi"})
+        respx.post(url__regex=r".*/api/v1/conversation/.*/stream").mock(
+            return_value=httpx.Response(200, text=stream_body)
+        )
+
+        # First call — creates session
+        client.stream_chat("hello", "gpt-5-chat-global", session_id="s1")
+        assert create_route.call_count == 1
+
+        # Second call — skips create
+        client.stream_chat("follow up", "gpt-5-chat-global", session_id="s1")
+        assert create_route.call_count == 1  # still 1, not 2
+
+    @respx.mock
     def test_upload_document(self, client: GenAIClient) -> None:
         respx.put(
             "https://api-genai.test.com/api/v1/conversation/s1/document/upload"
