@@ -338,3 +338,45 @@ class TestExportCommand:
             repl._handle_command("/export")
             output = display._file.getvalue()  # type: ignore[union-attr]
             assert "not available" in output.lower() or "Specify a filename" in output
+
+
+class TestFilesQuotedPaths:
+    """Tests for /files with shlex.split and user feedback."""
+
+    def test_shlex_split_quotes(
+        self, repl: ReplSession, tmp_path: Path, display: Display
+    ) -> None:
+        """Quoted paths with spaces handled."""
+        spaced_dir = tmp_path / "path with spaces"
+        spaced_dir.mkdir()
+        (spaced_dir / "module.py").write_text("# module\n")
+
+        repl._handle_command(f'/files "{spaced_dir}/module.py"')
+        assert len(repl._queued_files) > 0
+
+    def test_empty_result_warning(
+        self, repl: ReplSession, tmp_path: Path, display: Display
+    ) -> None:
+        """REPL shows warning when no files found."""
+        repl._handle_command(f"/files {tmp_path}/nonexistent_dir/*.py")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "No files found" in output or "No supported files" in output
+        assert len(repl._queued_files) == 0
+
+    def test_unmatched_path_warning(
+        self, repl: ReplSession, tmp_path: Path, display: Display
+    ) -> None:
+        """REPL shows warning for unmatched paths."""
+        repl._handle_command(f"/files {tmp_path}/does_not_exist.py")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "No files found for" in output or "No supported files" in output
+
+    def test_glob_pattern_in_repl(
+        self, repl: ReplSession, tmp_path: Path, display: Display
+    ) -> None:
+        """Glob patterns work from the REPL /files command."""
+        (tmp_path / "a.py").write_text("# a\n")
+        (tmp_path / "b.py").write_text("# b\n")
+
+        repl._handle_command(f"/files {tmp_path}/*.py")
+        assert len(repl._queued_files) > 0

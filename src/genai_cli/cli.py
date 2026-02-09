@@ -104,7 +104,7 @@ def ask(
     if files:
         bundler = FileBundler(config)
         ft = file_type if file_type != "all" else None
-        bundles = bundler.bundle_files(list(files), file_type=ft)
+        bundles, _unmatched = bundler.bundle_files(list(files), file_type=ft)
         for bundle in bundles:
             display.print_bundle_summary(
                 bundle.file_type, bundle.file_count, bundle.estimated_tokens
@@ -358,7 +358,7 @@ def files_cmd(ctx: click.Context, paths: tuple[str, ...], file_type: str) -> Non
 
     bundler = FileBundler(config)
     ft = file_type if file_type != "all" else None
-    bundles = bundler.bundle_files(list(paths), file_type=ft)
+    bundles, _unmatched = bundler.bundle_files(list(paths), file_type=ft)
 
     if not bundles:
         display.print_warning("No files found matching criteria")

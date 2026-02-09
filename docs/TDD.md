@@ -250,3 +250,64 @@ back to the legacy parser. New responses will use SEARCH/REPLACE.
 - [ ] File rename/move operations via a `<<<<<<< RENAME` marker
 - [ ] Conflict detection when multiple edits overlap in the same file
 - [ ] Metrics: track match-tier usage (exact vs normalized) for prompt tuning
+
+---
+
+## 9. File Bundler: Glob & External Path Support
+
+### 9.1 Problem
+
+The `FileBundler.discover_files()` method only handled literal file paths and
+directory paths. It silently skipped:
+- Glob patterns like `*.py` (not a file, not a directory — ignored)
+- Non-existent paths (no feedback to user)
+- Paths with quotes from REPL input (split on whitespace breaks quoted paths)
+
+### 9.2 Solution
+
+**Glob expansion** via `glob.glob(path_str, recursive=True)` before path resolution:
+
+```
+User input: "/c/reportfolder/*.py"
+    │
+    ▼
+glob.glob("/c/reportfolder/*.py", recursive=True)
+    │
+    ▼
+["/c/reportfolder/main.py", "/c/reportfolder/utils.py"]
+    │
+    ▼
+Path.resolve() → classify → _add_file()
+```
+
+**Quote handling** via `shlex.split()` in REPL:
+
+```
+User input: /files "/path with spaces/file.py" src/*.py
+    │
+    ▼
+shlex.split() → ["/path with spaces/file.py", "src/*.py"]
+```
+
+**Unmatched path reporting**: `discover_files()` returns `(discovered, unmatched)`
+tuple so the REPL can warn about paths that produced no files.
+
+### 9.3 Exclude Pattern Matching
+
+During `os.walk`, excluded directory names are filtered from the `dirs` list to
+prevent descending into them. The `_walk_dir()` helper prunes dirs in-place
+before iteration. The exclude patterns in `settings.yaml` cover all standard
+`.gitignore` entries. Pattern matching uses `fnmatch` which handles `**` patterns
+against full paths.
+
+### 9.4 Testing
+
+| Test | Validates |
+|------|-----------|
+| `test_glob_expansion` | `*.py` pattern expands to matching files |
+| `test_absolute_path` | `/absolute/path/file.py` resolves and bundles |
+| `test_unmatched_paths` | Non-existent paths returned in unmatched list |
+| `test_exclude_venv` | `.venv/` directory skipped during walk |
+| `test_exclude_gitignore_dirs` | All `.gitignore`-standard dirs excluded |
+| `test_shlex_split_quotes` | Quoted paths with spaces handled |
+| `test_empty_result_warning` | REPL shows warning when no files found |

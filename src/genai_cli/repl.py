@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import sys
 from collections.abc import Iterable
@@ -304,8 +305,22 @@ class ReplSession:
                 self._display.print_info("No files queued. Usage: /files <path>")
             return
 
-        paths = arg.split()
-        bundles = self._bundler.bundle_files(paths)
+        try:
+            paths = shlex.split(arg)
+        except ValueError:
+            paths = arg.split()
+
+        bundles, unmatched = self._bundler.bundle_files(paths)
+
+        if unmatched:
+            self._display.print_warning(
+                f"No files found for: {', '.join(unmatched)}"
+            )
+
+        if not bundles:
+            self._display.print_warning("No supported files found.")
+            return
+
         for bundle in bundles:
             self._display.print_bundle_summary(
                 bundle.file_type, bundle.file_count, bundle.estimated_tokens
@@ -607,7 +622,7 @@ class ReplSession:
 
         # Upload queued files
         if self._queued_files:
-            bundles = self._bundler.bundle_files(self._queued_files)
+            bundles, _unmatched = self._bundler.bundle_files(self._queued_files)
             if bundles:
                 try:
                     client.upload_bundles(session_id, bundles)

@@ -96,7 +96,7 @@ class TestDiscoverFiles:
     def test_discover_from_dir(
         self, bundler: FileBundler, sample_project_dir: Path
     ) -> None:
-        result = bundler.discover_files([str(sample_project_dir / "src")])
+        result, unmatched = bundler.discover_files([str(sample_project_dir / "src")])
         assert "code" in result
         names = [p.name for p in result["code"]]
         assert "main.py" in names
@@ -105,14 +105,14 @@ class TestDiscoverFiles:
     def test_discover_single_file(
         self, bundler: FileBundler, sample_python_file: Path
     ) -> None:
-        result = bundler.discover_files([str(sample_python_file)])
+        result, unmatched = bundler.discover_files([str(sample_python_file)])
         assert "code" in result
         assert len(result["code"]) == 1
 
     def test_excludes_pycache(
         self, bundler: FileBundler, sample_project_dir: Path
     ) -> None:
-        result = bundler.discover_files([str(sample_project_dir)])
+        result, unmatched = bundler.discover_files([str(sample_project_dir)])
         all_paths = []
         for paths in result.values():
             all_paths.extend(str(p) for p in paths)
@@ -121,7 +121,7 @@ class TestDiscoverFiles:
     def test_excludes_env(
         self, bundler: FileBundler, sample_project_dir: Path
     ) -> None:
-        result = bundler.discover_files([str(sample_project_dir)])
+        result, unmatched = bundler.discover_files([str(sample_project_dir)])
         all_paths = []
         for paths in result.values():
             all_paths.extend(p.name for p in paths)
@@ -130,7 +130,7 @@ class TestDiscoverFiles:
     def test_filter_by_type(
         self, bundler: FileBundler, sample_project_dir: Path
     ) -> None:
-        result = bundler.discover_files(
+        result, unmatched = bundler.discover_files(
             [str(sample_project_dir)], file_type="code"
         )
         assert "docs" not in result
@@ -140,15 +140,135 @@ class TestDiscoverFiles:
     ) -> None:
         big = tmp_path / "big.py"
         big.write_text("x" * (600 * 1024))  # 600KB > 500KB limit
-        result = bundler.discover_files([str(big)])
+        result, unmatched = bundler.discover_files([str(big)])
         assert "code" not in result or big not in result.get("code", [])
+
+
+class TestGlobExpansion:
+    """Tests for glob pattern expansion in discover_files."""
+
+    def test_glob_expansion(
+        self, bundler: FileBundler, tmp_path: Path
+    ) -> None:
+        """*.py pattern expands to matching files."""
+        (tmp_path / "a.py").write_text("# a")
+        (tmp_path / "b.py").write_text("# b")
+        (tmp_path / "c.txt").write_text("# c")
+
+        result, unmatched = bundler.discover_files(
+            [str(tmp_path / "*.py")]
+        )
+        assert "code" in result
+        names = {p.name for p in result["code"]}
+        assert "a.py" in names
+        assert "b.py" in names
+        assert "c.txt" not in names
+        assert unmatched == []
+
+    def test_absolute_path(
+        self, bundler: FileBundler, tmp_path: Path
+    ) -> None:
+        """Absolute path resolves and bundles."""
+        f = tmp_path / "external.py"
+        f.write_text("x = 1\n")
+
+        result, unmatched = bundler.discover_files([str(f)])
+        assert "code" in result
+        assert len(result["code"]) == 1
+        assert result["code"][0].name == "external.py"
+        assert unmatched == []
+
+    def test_unmatched_paths(
+        self, bundler: FileBundler, tmp_path: Path
+    ) -> None:
+        """Non-existent paths returned in unmatched list."""
+        result, unmatched = bundler.discover_files(
+            [str(tmp_path / "nonexistent.py"), str(tmp_path / "nope/*.py")]
+        )
+        assert len(unmatched) == 2
+        assert not result
+
+    def test_recursive_glob(
+        self, bundler: FileBundler, tmp_path: Path
+    ) -> None:
+        """Recursive **/*.py pattern finds nested files."""
+        sub = tmp_path / "pkg"
+        sub.mkdir()
+        (sub / "mod.py").write_text("# mod")
+        (tmp_path / "top.py").write_text("# top")
+
+        result, unmatched = bundler.discover_files(
+            [str(tmp_path / "**/*.py")]
+        )
+        assert "code" in result
+        names = {p.name for p in result["code"]}
+        assert "mod.py" in names
+        assert "top.py" in names
+
+
+class TestExcludePatterns:
+    """Tests for expanded exclude patterns."""
+
+    def test_exclude_venv(
+        self, bundler: FileBundler, tmp_path: Path
+    ) -> None:
+        """.venv/ directory skipped during walk."""
+        venv = tmp_path / ".venv" / "lib"
+        venv.mkdir(parents=True)
+        (venv / "pkg.py").write_text("# venv file")
+        (tmp_path / "app.py").write_text("# app")
+
+        result, _ = bundler.discover_files([str(tmp_path)])
+        all_paths = []
+        for paths in result.values():
+            all_paths.extend(str(p) for p in paths)
+        assert not any(".venv" in p for p in all_paths)
+        assert any("app.py" in p for p in all_paths)
+
+    def test_exclude_gitignore_dirs(
+        self, bundler: FileBundler, tmp_path: Path
+    ) -> None:
+        """All .gitignore-standard dirs excluded."""
+        for dirname in ["node_modules", ".git", "dist", "build", "__pycache__",
+                        ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                        ".tox", ".eggs", "htmlcov", ".idea", ".vscode"]:
+            d = tmp_path / dirname
+            d.mkdir()
+            (d / "file.py").write_text(f"# {dirname}")
+
+        (tmp_path / "real.py").write_text("# real code")
+
+        result, _ = bundler.discover_files([str(tmp_path)])
+        all_paths = []
+        for paths in result.values():
+            all_paths.extend(str(p) for p in paths)
+
+        for dirname in ["node_modules", ".git", "dist", "build", "__pycache__",
+                        ".pytest_cache", ".mypy_cache", ".ruff_cache",
+                        ".tox", ".eggs", "htmlcov", ".idea", ".vscode"]:
+            assert not any(dirname in p for p in all_paths), f"{dirname} should be excluded"
+
+        assert any("real.py" in p for p in all_paths)
+
+    def test_exclude_ds_store(
+        self, bundler: FileBundler, tmp_path: Path
+    ) -> None:
+        """.DS_Store file excluded."""
+        (tmp_path / ".DS_Store").write_text("binary junk")
+        (tmp_path / "good.py").write_text("# good")
+
+        result, _ = bundler.discover_files([str(tmp_path)])
+        all_names = []
+        for paths in result.values():
+            all_names.extend(p.name for p in paths)
+        assert ".DS_Store" not in all_names
 
 
 class TestBundleFiles:
     def test_bundle_format(
         self, bundler: FileBundler, sample_project_dir: Path
     ) -> None:
-        bundles = bundler.bundle_files(
+        bundles, unmatched = bundler.bundle_files(
             [str(sample_project_dir / "src")],
             base_dir=sample_project_dir,
         )
@@ -160,14 +280,14 @@ class TestBundleFiles:
     def test_bundle_has_file_count(
         self, bundler: FileBundler, sample_project_dir: Path
     ) -> None:
-        bundles = bundler.bundle_files([str(sample_project_dir / "src")])
+        bundles, _ = bundler.bundle_files([str(sample_project_dir / "src")])
         code_bundle = next(b for b in bundles if b.file_type == "code")
         assert code_bundle.file_count == 2
 
     def test_bundle_per_type(
         self, bundler: FileBundler, sample_project_dir: Path
     ) -> None:
-        bundles = bundler.bundle_files([str(sample_project_dir)])
+        bundles, _ = bundler.bundle_files([str(sample_project_dir)])
         types = {b.file_type for b in bundles}
         assert "code" in types
         assert "docs" in types
@@ -175,7 +295,7 @@ class TestBundleFiles:
     def test_estimated_tokens(
         self, bundler: FileBundler, sample_project_dir: Path
     ) -> None:
-        bundles = bundler.bundle_files([str(sample_project_dir / "src")])
+        bundles, _ = bundler.bundle_files([str(sample_project_dir / "src")])
         code_bundle = next(b for b in bundles if b.file_type == "code")
         assert code_bundle.estimated_tokens > 0
 
@@ -203,12 +323,22 @@ class TestBundleFiles:
         }
         nb_path = tmp_path / "test.ipynb"
         nb_path.write_text(json.dumps(nb))
-        bundles = bundler.bundle_files([str(nb_path)], base_dir=tmp_path)
+        bundles, _ = bundler.bundle_files([str(nb_path)], base_dir=tmp_path)
         assert len(bundles) == 1
         assert bundles[0].file_type == "notebooks"
         assert "--- Cell 1 [markdown] ---" in bundles[0].content
         assert "--- Cell 2 [code] ---" in bundles[0].content
         assert "# Title" in bundles[0].content
+
+    def test_bundle_unmatched(
+        self, bundler: FileBundler, tmp_path: Path
+    ) -> None:
+        """bundle_files returns unmatched paths."""
+        bundles, unmatched = bundler.bundle_files(
+            [str(tmp_path / "nonexistent.py")]
+        )
+        assert len(bundles) == 0
+        assert len(unmatched) == 1
 
 
 class TestEstimateTokens:

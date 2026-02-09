@@ -57,10 +57,10 @@ web_ui_url: "https://genai.<domain>.com"
 |----------|--------|------|-------------|
 | List History | GET | `/api/v1/chathistory/?skip={n}&limit={n}` | application/json |
 | Get Conversation | GET | `/api/v1/chathistory/{session_id}` | application/json |
-| Create Chat | POST | `/api/v1/chathistory/create?chat_type=unified&timestamp={ts}&session_id={uuid}` | application/json |
+| Create Chat | GET | `/api/v1/chathistory/create?chat_type=unified&timestamp={ts}&session_id={uuid}` | — |
 | Upload Document | PUT | `/api/v1/conversation/{id}/document/upload` | multipart/form-data |
 | User Usage | GET | `/api/v1/user/usage` | application/json |
-| Stream | GET | `/api/v1/chathistory/stream` | text/event-stream |
+| Stream | POST | `/api/v1/conversation/{session_id}/stream` | multipart/form-data |
 | Details | GET | `/api/v1/conversation/{id}/details` | application/json |
 | Details All | GET | `/api/v1/conversation/{id}/details-all` | application/json |
 
@@ -487,7 +487,7 @@ You> /quit
 | `/help` | Show all commands |
 | `/model [name]` | List models or switch to specified model |
 | `/models` | List all available models with limits |
-| `/files <paths...>` | Queue files for next message |
+| `/files <paths\|globs...>` | Queue files for next message. Supports absolute paths, glob patterns (e.g., `*.py`, `/path/to/*.js`), and quoted paths with spaces. |
 | `/clear` | Clear session, start fresh conversation |
 | `/fresh` | Alias for `/clear` |
 | `/compact` | Summarize conversation to reduce token usage |
@@ -550,7 +550,14 @@ genai auth verify
 
 ### 8.1 Type Definitions
 
-Stored in `config/settings.yaml`, fully customizable:
+Stored in `config/settings.yaml`, fully customizable.
+
+**Path Resolution:**
+- Absolute paths are accepted (e.g., `/c/reportfolder/main.py`)
+- Glob patterns are expanded (e.g., `src/**/*.py`, `/tmp/repo/*.ts`)
+- Quoted paths handle spaces (e.g., `"/path with spaces/file.py"`)
+- All matching files are classified by type and bundled for upload
+- If no supported files are found, a warning is displayed
 
 ```yaml
 file_types:
@@ -625,6 +632,17 @@ exclude_patterns:
   - "**/build/**"
   - "**/.pytest_cache/**"
   - "**/*.pyc"
+  - "**/*.egg-info/**"
+  - "**/.mypy_cache/**"
+  - "**/.ruff_cache/**"
+  - "**/.tox/**"
+  - "**/.eggs/**"
+  - "**/htmlcov/**"
+  - "**/.coverage"
+  - "**/*.bak"
+  - "**/.DS_Store"
+  - "**/.idea/**"
+  - "**/.vscode/**"
 ```
 
 ### 8.2 Bundle Format
@@ -1096,6 +1114,12 @@ genai auth verify
   → Shows: email, expiry time, remaining quota
 ```
 
+**Auto-login from environment:**
+When `scripts/run.sh` detects `GENAI_AUTH_TOKEN` and `GENAI_API_BASE_URL`
+environment variables, it automatically writes them to `~/.genai-cli/.env`
+and `~/.genai-cli/settings.yaml`, eliminating the need for `genai auth login`.
+This enables `source .env && make run` as a single-step workflow.
+
 ### 13.2 Token Storage
 
 ```bash
@@ -1405,7 +1429,7 @@ Establish foundation for iterative development with clean separation of concerns
 
 | # | Question | Impact | Status |
 |---|----------|--------|--------|
-| 1 | Exact JSON body for POST create chat | Needed for Phase 1 | Need to capture from browser |
+| 1 | Exact JSON body for POST create chat | Needed for Phase 1 | **Resolved** — Create uses GET with query params, Stream uses POST multipart/form-data. Two-step flow. See §3.2. |
 | 2 | Does streaming use SSE or WebSocket | Streaming implementation | Test with curl |
 | 3 | API rate limits | Retry/backoff strategy | Test empirically |
 | 4 | JWT token lifetime | Expiry warning threshold | Check token `exp` claim |

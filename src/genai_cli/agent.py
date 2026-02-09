@@ -86,7 +86,7 @@ class AgentLoop:
 
         # Upload files if provided
         if files:
-            bundles = self._bundler.bundle_files(files)
+            bundles, _unmatched = self._bundler.bundle_files(files)
             for bundle in bundles:
                 self._display.print_bundle_summary(
                     bundle.file_type, bundle.file_count, bundle.estimated_tokens

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import glob as glob_mod
 import os
 from pathlib import Path
 from typing import Any
@@ -56,32 +57,64 @@ class FileBundler:
         self,
         paths: list[str],
         file_type: str | None = None,
-    ) -> dict[str, list[Path]]:
+    ) -> tuple[dict[str, list[Path]], list[str]]:
         """Discover and classify files from given paths.
 
-        Returns dict of {type_name: [paths]}.
+        Supports literal paths, directory paths, and glob patterns.
+
+        Returns (dict of {type_name: [paths]}, list of unmatched path strings).
         """
         result: dict[str, list[Path]] = {}
+        unmatched: list[str] = []
         exclude = self._settings.exclude_patterns
 
         for path_str in paths:
-            path = Path(path_str).resolve()
-            if path.is_file():
-                self._add_file(path, result, exclude, file_type)
-            elif path.is_dir():
-                for root, dirs, files in os.walk(path):
-                    root_path = Path(root)
-                    # Filter excluded directories
-                    rel_root = str(root_path)
-                    if _matches_any(rel_root, exclude):
-                        dirs.clear()
-                        continue
+            # Try glob expansion first
+            expanded = glob_mod.glob(path_str, recursive=True)
+            if expanded:
+                for match in expanded:
+                    match_path = Path(match).resolve()
+                    if match_path.is_file():
+                        self._add_file(match_path, result, exclude, file_type)
+                    elif match_path.is_dir():
+                        self._walk_dir(match_path, result, exclude, file_type)
+            else:
+                # No glob match — try as literal path
+                path = Path(path_str).resolve()
+                if path.is_file():
+                    self._add_file(path, result, exclude, file_type)
+                elif path.is_dir():
+                    self._walk_dir(path, result, exclude, file_type)
+                else:
+                    unmatched.append(path_str)
 
-                    for fname in files:
-                        fpath = root_path / fname
-                        self._add_file(fpath, result, exclude, file_type)
+        return result, unmatched
 
-        return result
+    def _walk_dir(
+        self,
+        dir_path: Path,
+        result: dict[str, list[Path]],
+        exclude: list[str],
+        file_type: str | None,
+    ) -> None:
+        """Walk a directory and add discovered files to result."""
+        for root, dirs, files in os.walk(dir_path):
+            root_path = Path(root)
+            # Filter excluded directories
+            rel_root = str(root_path)
+            if _matches_any(rel_root, exclude):
+                dirs.clear()
+                continue
+
+            # Prune excluded directory names in-place
+            dirs[:] = [
+                d for d in dirs
+                if not _matches_any(str(root_path / d), exclude)
+            ]
+
+            for fname in files:
+                fpath = root_path / fname
+                self._add_file(fpath, result, exclude, file_type)
 
     def _add_file(
         self,
@@ -129,9 +162,12 @@ class FileBundler:
         paths: list[str],
         file_type: str | None = None,
         base_dir: Path | None = None,
-    ) -> list[FileBundle]:
-        """Bundle discovered files into FileBundle objects per type."""
-        discovered = self.discover_files(paths, file_type)
+    ) -> tuple[list[FileBundle], list[str]]:
+        """Bundle discovered files into FileBundle objects per type.
+
+        Returns (list of bundles, list of unmatched path strings).
+        """
+        discovered, unmatched = self.discover_files(paths, file_type)
         base = base_dir or Path.cwd()
         bundles: list[FileBundle] = []
 
@@ -150,7 +186,7 @@ class FileBundler:
             )
             bundles.append(bundle)
 
-        return bundles
+        return bundles, unmatched
 
     def _bundle_regular(self, file_paths: list[Path], base: Path) -> str:
         """Bundle regular files with ===== FILE: markers."""

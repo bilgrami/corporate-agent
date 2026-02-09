@@ -4,6 +4,45 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-08 | feat: Glob patterns, absolute paths, and exclusions for /files command
+
+### Summary
+The `/files` command now supports glob patterns (e.g., `*.py`, `**/*.ts`),
+absolute paths (e.g., `/c/reportfolder/main.py`), and quoted paths with spaces.
+Unmatched paths produce a warning instead of being silently ignored. The
+exclude_patterns list in `settings.yaml` has been expanded to cover all standard
+`.gitignore` entries (`.mypy_cache`, `.ruff_cache`, `.tox`, `.eggs`, `htmlcov`,
+`.coverage`, `.bak`, `.DS_Store`, `.idea`, `.vscode`, `*.egg-info`).
+
+### Files Changed
+- `config/settings.yaml` — Expanded exclude_patterns with 11 new entries
+- `src/genai_cli/bundler.py` — Added `glob.glob` expansion, `_walk_dir()` helper, `discover_files()` and `bundle_files()` now return `(result, unmatched)` tuples
+- `src/genai_cli/repl.py` — Added `shlex.split()` for quoted path parsing, warnings for unmatched/empty results
+- `src/genai_cli/agent.py` — Updated for `bundle_files()` tuple return
+- `src/genai_cli/cli.py` — Updated for `bundle_files()` tuple return
+- `tests/test_bundler.py` — Added 8 new tests: glob expansion, absolute paths, unmatched paths, recursive glob, venv exclusion, gitignore dirs, DS_Store, bundle unmatched
+- `tests/test_repl.py` — Added 4 new tests: shlex quotes, empty result warning, unmatched warning, glob in REPL
+- `docs/PRD.md` — Updated endpoints (§3.2), /files command (§7.2), path resolution (§8.1), exclude_patterns (§8.1), auto-login (§13.1), open questions (§20)
+- `docs/TDD.md` — Added Section 9: File Bundler glob & external path support
+
+### Rationale
+The `/files` command previously only accepted literal file paths and directory
+paths. Users needed to point it at external repos with glob patterns and get
+feedback when paths didn't match. The expanded exclude patterns prevent
+accidentally bundling build artifacts, cache directories, and IDE config files.
+
+### Behavior / Compatibility Implications
+- `discover_files()` return type changed from `dict` to `tuple[dict, list[str]]`
+- `bundle_files()` return type changed from `list[FileBundle]` to `tuple[list[FileBundle], list[str]]`
+- All callers updated (bundler, repl, agent, cli)
+
+### Testing Recommendations
+- `pytest tests/test_bundler.py tests/test_repl.py -v` — 93 tests passing
+- Manual: `/files /tmp/testfolder/*.py` → files discovered, bundled, uploaded
+- Manual: `/files "/path with spaces/file.py"` → handles quoted paths
+
+---
+
 ## 2026-02-08 | feat: Auto-configure from environment variables
 
 ### Summary
