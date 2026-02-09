@@ -20,6 +20,7 @@ pass_config = click.make_pass_decorator(ConfigManager, ensure=True)
 
 @click.group(invoke_without_command=True)
 @click.option("--model", "-m", default=None, help="Override model for this invocation")
+@click.option("--session-id", default=None, help="Reuse an existing session ID (e.g., from web UI)")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.option("--config", "-c", "config_path", default=None, help="Custom config file")
 @click.option("--json-output", "json_out", is_flag=True, help="Output as JSON")
@@ -28,6 +29,7 @@ pass_config = click.make_pass_decorator(ConfigManager, ensure=True)
 def main(
     ctx: click.Context,
     model: str | None,
+    session_id: str | None,
     verbose: bool,
     config_path: str | None,
     json_out: bool,
@@ -46,11 +48,12 @@ def main(
     ctx.obj["display"] = Display()
     ctx.obj["verbose"] = verbose
     ctx.obj["json_out"] = json_out
+    ctx.obj["session_id"] = session_id
 
     if ctx.invoked_subcommand is None:
         from genai_cli.repl import ReplSession
 
-        repl = ReplSession(ctx.obj["config"], ctx.obj["display"])
+        repl = ReplSession(ctx.obj["config"], ctx.obj["display"], session_id=session_id)
         repl.run()
 
 
@@ -111,6 +114,7 @@ def ask(
             )
         if bundles:
             try:
+                client.ensure_session(session_id, model_name)
                 client.upload_bundles(session_id, bundles)
                 display.print_success("Files uploaded")
             except Exception as e:

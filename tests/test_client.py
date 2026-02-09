@@ -209,6 +209,48 @@ class TestGenAIClient:
         assert msg.tokens_consumed == 150
         assert msg.session_id == "test-session-123"
 
+    @respx.mock
+    def test_ensure_session_creates_once(self, client: GenAIClient) -> None:
+        """ensure_session() calls create_chat only on first call for a session."""
+        create_route = respx.get("https://api-genai.test.com/api/v1/chathistory/create").mock(
+            return_value=httpx.Response(200, json={"status": "created"})
+        )
+        client.ensure_session("sid-1", "gpt-5-chat-global")
+        assert create_route.call_count == 1
+
+        # Second call with same session — skips create
+        client.ensure_session("sid-1", "gpt-5-chat-global")
+        assert create_route.call_count == 1
+
+    @respx.mock
+    def test_ensure_session_returns_session_id(self, client: GenAIClient) -> None:
+        """ensure_session() returns the session_id passed in."""
+        respx.get("https://api-genai.test.com/api/v1/chathistory/create").mock(
+            return_value=httpx.Response(200, json={"status": "created"})
+        )
+        result = client.ensure_session("my-sid", "gpt-5-chat-global")
+        assert result == "my-sid"
+
+    def test_mark_session_created(self, client: GenAIClient) -> None:
+        """mark_session_created() prevents ensure_session from calling create."""
+        client.mark_session_created("pre-existing-sid")
+        # No HTTP mock needed — ensure_session should not make any call
+        result = client.ensure_session("pre-existing-sid", "gpt-5-chat-global")
+        assert result == "pre-existing-sid"
+
+    @respx.mock
+    def test_create_chat_timestamp_locale_format(self, client: GenAIClient) -> None:
+        """create_chat() uses locale-style timestamp matching browser format."""
+        route = respx.get("https://api-genai.test.com/api/v1/chathistory/create").mock(
+            return_value=httpx.Response(200, json={"status": "created"})
+        )
+        client.create_chat("hello", "gpt-5-chat-global")
+        request = route.calls[0].request
+        ts = str(request.url.params.get("timestamp", ""))
+        # Should be like "2/8/2026, 07:41:45 PM" not ISO format
+        assert "T" not in ts
+        assert "," in ts
+
     def test_close(self, client: GenAIClient) -> None:
         # Should not raise even if client not initialized
         client.close()

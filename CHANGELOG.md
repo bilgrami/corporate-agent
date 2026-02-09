@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-08 | feat: Immediate file upload, session reuse, and web UI visibility
+
+### Summary
+CLI conversations now appear in the web UI. `/files` uploads immediately instead
+of queuing. Users can reuse a web UI session via `GENAI_SESSION_ID` env var or
+`--session-id` flag. Upload ordering fixed so sessions always exist before file
+uploads. Timestamp format matches the browser's locale format. New `/session`
+command shows full session ID and web UI link. `/clear` now creates a new API
+session.
+
+### Files Changed
+- `src/genai_cli/client.py` — Added `ensure_session()`, `mark_session_created()`; fixed timestamp format in `create_chat()`
+- `src/genai_cli/repl.py` — Session ID from env/flag; `/files` uploads immediately; `/clear` creates API session; added `/session` command; fixed upload ordering
+- `src/genai_cli/agent.py` — `ensure_session()` before `upload_bundles()`
+- `src/genai_cli/cli.py` — Added `--session-id` flag; `ensure_session()` before `upload_bundles()` in `ask`
+- `tests/test_client.py` — Tests for `ensure_session()`, `mark_session_created()`, timestamp format
+- `tests/test_repl.py` — Tests for immediate upload, session reuse, `/clear`, `/session`, env var
+- `docs/PRD.md` — Updated §7.2 (`/session`), §7.4 (`--session-id`), §8.1 (immediate upload), §12.3 (`GENAI_SESSION_ID`)
+- `docs/TDD.md` — Added §10: Session Reuse & Immediate Upload
+- `CHANGELOG.md` — This entry
+
+### Rationale
+The CLI created a fresh UUID per session and never associated it with the web UI.
+File uploads ran before session creation on the API, causing 400 errors or orphaned
+files. Users needed a way to continue web UI conversations in the CLI and vice versa.
+
+### Behavior / Compatibility Implications
+- `/files` no longer queues files — they are uploaded immediately
+- `_queued_files` is no longer populated by `/files` (only agent/skill code paths)
+- `GENAI_SESSION_ID` env var is a new way to set session ID
+- `--session-id` is a new global CLI flag
+- `create_chat()` timestamp format changed from ISO-8601 to locale-style
+- `/session` is a new slash command
+- `/clear` now creates a new session on the API (in addition to local reset)
+
+### Testing Recommendations
+- `pytest tests/test_client.py tests/test_repl.py -v` — new tests pass
+- Full `pytest` — no regressions
+- Manual: set `GENAI_SESSION_ID=<uuid>` in `.env`, run CLI, `/files src/*.py` → files uploaded → check web UI
+- Manual: `/session` → shows full session ID + web UI link
+- Manual: `/clear` → new session created
+
+---
+
 ## 2026-02-08 | feat: Glob patterns, absolute paths, and exclusions for /files command
 
 ### Summary

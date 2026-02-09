@@ -63,11 +63,15 @@ class TestReplCommands:
         repl._handle_command("/models")
         # Should not raise
 
-    def test_files_queue(
+    def test_files_upload(
         self, repl: ReplSession, sample_project_dir: Path
     ) -> None:
+        mock_client = MagicMock()
+        repl._client = mock_client
         repl._handle_command(f"/files {sample_project_dir / 'src'}")
-        assert len(repl._queued_files) > 0
+        # Files are uploaded immediately, not queued
+        assert len(repl._queued_files) == 0
+        assert mock_client.upload_bundles.called
 
     def test_files_empty(self, repl: ReplSession) -> None:
         repl._handle_command("/files")
@@ -340,6 +344,107 @@ class TestExportCommand:
             assert "not available" in output.lower() or "Specify a filename" in output
 
 
+class TestSessionCommand:
+    """Tests for /session command."""
+
+    def test_session_command_shows_full_id(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        """/session displays full UUID (not truncated)."""
+        sid = repl._session["session_id"]
+        repl._handle_command("/session")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert sid in output
+
+    def test_session_command_shows_web_link(
+        self, tmp_path: Path, display: Display
+    ) -> None:
+        """/session displays web UI link when web_ui_url is configured."""
+        session_dir = tmp_path / "sessions"
+        session_dir.mkdir()
+        settings = {
+            "api_base_url": "https://api.test.com",
+            "web_ui_url": "https://genai.test.com",
+            "session_dir": str(session_dir),
+            "default_model": "gpt-5-chat-global",
+        }
+        p = tmp_path / "settings.yaml"
+        p.write_text(yaml.dump(settings))
+        cfg = ConfigManager(config_path=str(p))
+        repl = ReplSession(cfg, display)
+        sid = repl._session["session_id"]
+        repl._handle_command("/session")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert f"https://genai.test.com/chat/{sid}" in output
+
+
+class TestImmediateUpload:
+    """Tests for /files immediate upload behavior."""
+
+    def test_files_uploads_immediately(
+        self, repl: ReplSession, sample_project_dir: Path, display: Display
+    ) -> None:
+        """/files <path> triggers upload, _queued_files stays empty."""
+        mock_client = MagicMock()
+        repl._client = mock_client
+
+        repl._handle_command(f"/files {sample_project_dir / 'src'}")
+        # Files should NOT be queued (old behavior)
+        assert len(repl._queued_files) == 0
+        # upload_bundles should have been called
+        assert mock_client.upload_bundles.called
+
+    def test_files_creates_session_first(
+        self, repl: ReplSession, sample_project_dir: Path, display: Display
+    ) -> None:
+        """Session is created on API before upload."""
+        mock_client = MagicMock()
+        repl._client = mock_client
+
+        repl._handle_command(f"/files {sample_project_dir / 'src'}")
+        # ensure_session should be called before upload_bundles
+        assert mock_client.ensure_session.called
+        assert mock_client.upload_bundles.called
+        # ensure_session called first
+        ensure_call_order = mock_client.ensure_session.call_args_list[0]
+        upload_call_order = mock_client.upload_bundles.call_args_list[0]
+        assert ensure_call_order is not None
+        assert upload_call_order is not None
+
+
+class TestClearCreatesSession:
+    """Tests for /clear creating a new API session."""
+
+    def test_clear_creates_new_api_session(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        """/clear calls ensure_session() and updates session_id."""
+        old_id = repl._session["session_id"]
+        mock_client = MagicMock()
+        repl._client = mock_client
+
+        repl._handle_command("/clear")
+        new_id = repl._session["session_id"]
+        assert new_id != old_id
+        assert mock_client.ensure_session.called
+
+
+class TestEnvSessionId:
+    """Tests for GENAI_SESSION_ID env var."""
+
+    def test_env_session_id_reused(
+        self, repl_config: ConfigManager, display: Display
+    ) -> None:
+        """GENAI_SESSION_ID env var is used, create_chat skipped."""
+        env_sid = "env-session-id-from-web-ui"
+        with patch.dict("os.environ", {"GENAI_SESSION_ID": env_sid}):
+            repl = ReplSession(repl_config, display)
+            assert repl._session["session_id"] == env_sid
+            # Client should have mark_session_created called
+            client = repl._get_client()
+            assert env_sid in client._created_sessions
+
+
 class TestFilesQuotedPaths:
     """Tests for /files with shlex.split and user feedback."""
 
@@ -351,8 +456,11 @@ class TestFilesQuotedPaths:
         spaced_dir.mkdir()
         (spaced_dir / "module.py").write_text("# module\n")
 
+        mock_client = MagicMock()
+        repl._client = mock_client
         repl._handle_command(f'/files "{spaced_dir}/module.py"')
-        assert len(repl._queued_files) > 0
+        # Files are uploaded immediately, not queued
+        assert mock_client.upload_bundles.called
 
     def test_empty_result_warning(
         self, repl: ReplSession, tmp_path: Path, display: Display
@@ -378,5 +486,8 @@ class TestFilesQuotedPaths:
         (tmp_path / "a.py").write_text("# a\n")
         (tmp_path / "b.py").write_text("# b\n")
 
+        mock_client = MagicMock()
+        repl._client = mock_client
         repl._handle_command(f"/files {tmp_path}/*.py")
-        assert len(repl._queued_files) > 0
+        # Files are uploaded immediately
+        assert mock_client.upload_bundles.called

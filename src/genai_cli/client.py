@@ -82,6 +82,17 @@ class GenAIClient:
         result: list[dict[str, Any]] = self._handle_response(resp)
         return result
 
+    def ensure_session(self, session_id: str, model: str = "") -> str:
+        """Create session on the API if not already registered. Returns the session_id."""
+        if session_id not in self._created_sessions:
+            self.create_chat("", model, session_id)
+            self._created_sessions.add(session_id)
+        return session_id
+
+    def mark_session_created(self, session_id: str) -> None:
+        """Mark a session as already created (e.g., from web UI env var)."""
+        self._created_sessions.add(session_id)
+
     def create_chat(
         self,
         message: str,
@@ -91,7 +102,8 @@ class GenAIClient:
         """Create a new chat session entry."""
         client = self._get_client()
         sid = session_id or str(uuid.uuid4())
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.now(timezone.utc)
+        ts = f"{now.month}/{now.day}/{now.year}, {now.strftime('%I:%M:%S %p')}"
         method = self._mapper.endpoint_method("chat_create")
 
         resp = client.request(

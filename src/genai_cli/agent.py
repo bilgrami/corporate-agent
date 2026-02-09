@@ -84,7 +84,7 @@ class AgentLoop:
         result = AgentResult()
         session_id = self._session["session_id"]
 
-        # Upload files if provided
+        # Upload files if provided (ensure session exists on API first)
         if files:
             bundles, _unmatched = self._bundler.bundle_files(files)
             for bundle in bundles:
@@ -93,6 +93,7 @@ class AgentLoop:
                 )
             if bundles:
                 try:
+                    self._client.ensure_session(session_id, model)
                     self._client.upload_bundles(session_id, bundles)
                     self._display.print_success("Files uploaded")
                 except Exception as e:

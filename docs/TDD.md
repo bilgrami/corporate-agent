@@ -311,3 +311,107 @@ against full paths.
 | `test_exclude_gitignore_dirs` | All `.gitignore`-standard dirs excluded |
 | `test_shlex_split_quotes` | Quoted paths with spaces handled |
 | `test_empty_result_warning` | REPL shows warning when no files found |
+
+---
+
+## 10. Session Reuse & Immediate Upload
+
+### 10.1 Problem
+
+CLI conversations didn't appear in the web UI due to several issues:
+
+1. **`/files` only queued** — files weren't uploaded until the next message
+2. **Upload-before-create bug** — `upload_bundles()` ran before `create_chat()`,
+   uploading to a non-existent API session
+3. **No session reuse** — the CLI always generated a new UUID; users couldn't
+   continue the same conversation in both CLI and web UI
+4. **Timestamp format mismatch** — browser sends locale format (`M/D/YYYY, H:MM:SS AM/PM`);
+   CLI sent ISO-8601
+
+### 10.2 Solution
+
+**`ensure_session()`**: New method on `GenAIClient` that creates the session on the
+API if not already registered. Idempotent — safe to call multiple times.
+
+```
+ensure_session(session_id, model)
+  ├── session_id in _created_sessions? → return (no-op)
+  └── else → create_chat() → add to _created_sessions → return
+```
+
+**Immediate upload in `/files`**:
+
+```
+Old:  /files *.py → queue → (wait for message) → upload → stream
+New:  /files *.py → bundle → ensure_session → upload → done
+```
+
+**Session ID resolution** (priority order):
+1. `--session-id` CLI flag
+2. `GENAI_SESSION_ID` environment variable
+3. Auto-generated UUID
+
+When session_id comes from flag or env var (not `/resume`), it's marked as already
+created via `mark_session_created()` to skip the `create_chat()` API call.
+
+**Upload ordering fix**: All code paths (REPL, agent, `ask` command) now call
+`ensure_session()` before `upload_bundles()`.
+
+**Timestamp fix**: `create_chat()` now formats timestamps as `M/D/YYYY, H:MM:SS AM/PM`
+to match the browser's locale format.
+
+### 10.3 Flow Diagram
+
+```
+CLI Start
+    │
+    ├── --session-id flag provided?
+    │   └── Yes → mark_session_created(sid)
+    │
+    ├── GENAI_SESSION_ID env var?
+    │   └── Yes → mark_session_created(sid)
+    │
+    └── No → generate UUID
+    │
+    ▼
+User types: /files src/*.py
+    │
+    ▼
+bundle_files(paths)
+    │
+    ▼
+ensure_session(session_id, model)
+    ├── Already created? → skip
+    └── Not created → create_chat() → register
+    │
+    ▼
+upload_bundles(session_id, bundles)
+    │
+    ▼
+✓ Files uploaded (visible in web UI immediately)
+```
+
+### 10.4 `/session` Command
+
+Displays the full session ID (not truncated) and a clickable web UI link:
+
+```
+/session
+  Session ID: af86d528-2b12-4d68-a45f-09cafddc7e63
+  Web UI: https://genai.example.com/chat/af86d528-2b12-4d68-a45f-09cafddc7e63
+```
+
+### 10.5 Testing
+
+| Test | Validates |
+|------|-----------|
+| `test_ensure_session_creates_once` | `create_chat` called only once for same session_id |
+| `test_ensure_session_returns_session_id` | Returns the session_id passed in |
+| `test_mark_session_created` | Marked session skips create |
+| `test_create_chat_timestamp_locale_format` | Timestamp uses locale format, not ISO |
+| `test_files_uploads_immediately` | `/files` triggers upload, `_queued_files` empty |
+| `test_files_creates_session_first` | `ensure_session` called before `upload_bundles` |
+| `test_clear_creates_new_api_session` | `/clear` creates new session on API |
+| `test_session_command_shows_full_id` | `/session` displays full UUID |
+| `test_session_command_shows_web_link` | `/session` displays web UI link |
+| `test_env_session_id_reused` | `GENAI_SESSION_ID` env var used, create skipped |

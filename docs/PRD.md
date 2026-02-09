@@ -487,13 +487,14 @@ You> /quit
 | `/help` | Show all commands |
 | `/model [name]` | List models or switch to specified model |
 | `/models` | List all available models with limits |
-| `/files <paths\|globs...>` | Queue files for next message. Supports absolute paths, glob patterns (e.g., `*.py`, `/path/to/*.js`), and quoted paths with spaces. |
+| `/files <paths\|globs...>` | Upload files immediately to the current session. Supports absolute paths, glob patterns (e.g., `*.py`, `/path/to/*.js`), and quoted paths with spaces. |
 | `/clear` | Clear session, start fresh conversation |
 | `/fresh` | Alias for `/clear` |
 | `/compact` | Summarize conversation to reduce token usage |
 | `/history` | List recent conversations |
 | `/resume <id>` | Resume a saved conversation |
 | `/usage` | Show token usage and costs |
+| `/session` | Show full session ID and web UI link |
 | `/status` | Show current session, model, token count |
 | `/config [key] [value]` | View or update settings |
 | `/skill <name>` | Invoke a skill |
@@ -532,6 +533,7 @@ genai auth verify
 
 ```
 --model, -m       Override model for this invocation
+--session-id      Reuse an existing session ID (e.g., from web UI)
 --files, -f       Files/directories to include
 --type, -t        File type filter: code|docs|scripts|notebooks|all
 --auto-apply      Auto-apply file changes without confirmation
@@ -1088,6 +1090,7 @@ Lowest priority
 ```bash
 GENAI_AUTH_TOKEN       # Bearer token (highest priority for auth)
 GENAI_API_BASE_URL     # API base URL override
+GENAI_SESSION_ID       # Reuse a web UI session ID (skips create_chat)
 GENAI_MODEL            # Default model override
 GENAI_AUTO_APPLY       # true/false
 GENAI_VERBOSE          # true/false

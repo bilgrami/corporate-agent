@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import shlex
 import subprocess
 import sys
+import uuid
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,6 +44,7 @@ class SlashCompleter(Completer):
         "/history": "List saved sessions",
         "/resume": "Resume a saved session",
         "/usage": "Show token usage",
+        "/session": "Show session ID and web link",
         "/status": "Show session status",
         "/config": "View or update settings",
         "/auto-apply": "Toggle auto-apply mode",
@@ -153,10 +156,17 @@ class ReplSession:
         self._agent_rounds: int = 0
         self._running = False
 
-        # Create or resume session
+        # Session ID resolution priority:
+        # 1. session_id arg (from --session-id or /resume)
+        # 2. GENAI_SESSION_ID env var
+        # 3. auto-generate UUID
+        is_resume = False
+
         if session_id:
+            # Check if this is a /resume (local session file exists)
             loaded = self._session_mgr.load_session(session_id)
             if loaded:
+                is_resume = True
                 self._session = loaded
                 self._model_name = loaded.get("model_name", self._model_name)
                 tracker_data = loaded.get("token_tracker")
@@ -165,10 +175,23 @@ class ReplSession:
                         tracker_data, config
                     )
             else:
-                display.print_warning(f"Session {session_id} not found, creating new")
+                # session_id from --session-id flag (pre-existing web UI session)
                 self._session = self._session_mgr.create_session(self._model_name)
+                self._session["session_id"] = session_id
         else:
-            self._session = self._session_mgr.create_session(self._model_name)
+            env_sid = os.environ.get("GENAI_SESSION_ID")
+            if env_sid:
+                session_id = env_sid
+                self._session = self._session_mgr.create_session(self._model_name)
+                self._session["session_id"] = env_sid
+            else:
+                self._session = self._session_mgr.create_session(self._model_name)
+
+        # If session_id was provided externally (not /resume), mark it as
+        # already created on the API so create_chat() is skipped
+        if session_id and not is_resume:
+            client = self._get_client()
+            client.mark_session_created(session_id)
 
     def _get_client(self) -> GenAIClient:
         """Lazily create the API client."""
@@ -222,6 +245,7 @@ class ReplSession:
             "/history": self._handle_history,
             "/resume": lambda: self._handle_resume(arg),
             "/usage": self._handle_usage,
+            "/session": self._handle_session,
             "/status": self._handle_status,
             "/config": lambda: self._handle_config(arg),
             "/auto-apply": lambda: self._handle_auto_apply(arg),
@@ -254,6 +278,7 @@ class ReplSession:
   /history           List saved sessions
   /resume <id>       Resume a saved session
   /usage             Show token usage
+  /session           Show session ID and web UI link
   /status            Show current session status
   /config [k] [v]    View or update settings
   /auto-apply [on|off]  Toggle auto-apply mode
@@ -295,7 +320,7 @@ class ReplSession:
         self._display.print_models_table(self._config.get_all_models())
 
     def _handle_files(self, arg: str) -> None:
-        """Queue files for next message."""
+        """Upload files immediately to the current session."""
         if not arg:
             if self._queued_files:
                 self._display.print_info(
@@ -325,13 +350,37 @@ class ReplSession:
             self._display.print_bundle_summary(
                 bundle.file_type, bundle.file_count, bundle.estimated_tokens
             )
-        self._queued_files.extend(paths)
+
+        # Upload immediately instead of queuing
+        try:
+            client = self._get_client()
+        except AuthError as e:
+            self._display.print_error(str(e))
+            return
+
+        session_id = self._session["session_id"]
+        client.ensure_session(session_id, self._model_name)
+
+        try:
+            client.upload_bundles(session_id, bundles)
+            self._display.print_success("Files uploaded")
+        except Exception as e:
+            self._display.print_error(f"Upload failed: {e}")
 
     def _handle_clear(self) -> None:
-        """Clear session and start fresh."""
+        """Clear session and start fresh with a new API session."""
         self._session = self._session_mgr.create_session(self._model_name)
         self._token_tracker.reset()
         self._queued_files.clear()
+
+        # Create the new session on the API immediately
+        try:
+            client = self._get_client()
+            new_id = self._session["session_id"]
+            client.ensure_session(new_id, self._model_name)
+        except AuthError:
+            pass  # Session will be created on first message
+
         self._display.print_success("Session cleared. Starting fresh.")
 
     def _handle_compact(self) -> None:
@@ -383,6 +432,15 @@ class ReplSession:
             self._display.print_info(
                 f"  Estimated cost: ${usage.estimated_cost:.4f}"
             )
+
+    def _handle_session(self) -> None:
+        """Show full session ID and web UI link."""
+        sid = self._session["session_id"]
+        self._display.print_info(f"  Session ID: {sid}")
+        web_ui_url = self._config.settings.web_ui_url
+        if web_ui_url:
+            link = f"{web_ui_url.rstrip('/')}/chat/{sid}"
+            self._display.print_info(f"  Web UI: {link}")
 
     def _handle_status(self) -> None:
         """Show current session status."""
@@ -620,11 +678,12 @@ class ReplSession:
 
         session_id = self._session["session_id"]
 
-        # Upload queued files
+        # Upload queued files (ensure session exists on API first)
         if self._queued_files:
             bundles, _unmatched = self._bundler.bundle_files(self._queued_files)
             if bundles:
                 try:
+                    client.ensure_session(session_id, self._model_name)
                     client.upload_bundles(session_id, bundles)
                     self._display.print_success("Files uploaded")
                 except Exception as e:
