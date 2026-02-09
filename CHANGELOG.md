@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-08 | feat: Auto-configure from environment variables
+
+### Summary
+`scripts/run.sh` now detects `GENAI_AUTH_TOKEN` and `GENAI_API_BASE_URL`
+environment variables and auto-saves them to `~/.genai-cli/` config files
+before launching the CLI. This enables `source .env && make run` without
+manually running `genai auth login`.
+
+### Files Changed
+- `scripts/run.sh` — Added env var detection and auto-save logic
+
+---
+
 ## 2026-02-08 | fix: Configurable HTTP methods and multi-step request flows
 
 ### Summary
