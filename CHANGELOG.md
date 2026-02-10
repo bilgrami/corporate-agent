@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-09 | feat: Add 5 new bundled system prompt profiles
+
+### Summary
+Added 5 new persona-focused prompt profiles to the bundled prompt library:
+`project-manager`, `debugger`, `tester`, `refactorer`, and `system-architect`.
+Each profile includes structured output formats tailored to its role and the
+standard emoji-style CHANGELOG format section. Total bundled prompts: 10.
+
+### Files Changed
+- `prompts/project-manager/PROMPT.md` — Doc-driven development lead with PRD/TDD rules, agents.md, and README FAQ updates
+- `prompts/debugger/PROMPT.md` — Systematic debugger with hypothesis-driven reproduce/isolate/root-cause/fix workflow
+- `prompts/tester/PROMPT.md` — Test engineer generating pytest-style unit/integration tests with edge cases and fixtures
+- `prompts/refactorer/PROMPT.md` — Refactoring specialist using SEARCH/REPLACE for extract method, dedup, simplify
+- `prompts/system-architect/PROMPT.md` — High-level system designer producing Architecture Decision Records (ADR)
+- `tests/test_prompt_loader.py` — Updated bundled prompt count assertion from 5 to 10
+- `tests/test_prompt_registry.py` — Updated prompt discovery count assertion from 5 to 10
+- `CHANGELOG.md` — This entry
+
+### Rationale
+The existing 5 prompts (default, code-changes, reviewer, planner, minimal) covered
+general use cases. These 5 additions provide specialized personas for project
+management, debugging, testing, refactoring, and architecture — the most common
+software engineering workflows.
+
+### Behavior / Compatibility Implications
+- `genai prompt list` now shows 10 prompts instead of 5
+- All new prompts follow the same frontmatter schema and are auto-discovered
+- No changes to existing prompts or prompt system internals
+
+### Testing Recommendations
+- `pytest tests/test_prompt_loader.py tests/test_prompt_registry.py -v` — 21 tests passing
+- `pytest tests/ -v` — full suite (398 tests) passing
+- `genai prompt list` — shows all 10 prompts
+- `genai prompt show debugger` — renders full body
+
+### Follow-ups
+- [ ] Add more domain-specific prompts (e.g., devops, data-engineer, security)
+- [ ] Prompt composition — combine multiple profiles
+
+---
+
 ## 2026-02-08 | fix: 415 upload error and send system prompt after /files
 
 ### Summary
