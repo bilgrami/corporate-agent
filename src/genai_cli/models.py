@@ -55,6 +55,7 @@ class AppSettings:
     blocked_write_patterns: list[str] = field(default_factory=list)
     file_types: dict[str, FileTypeConfig] = field(default_factory=dict)
     exclude_patterns: list[str] = field(default_factory=list)
+    workspace_dir: str = ""
 
 
 @dataclass

@@ -4,6 +4,80 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-10 | feat: Add repo-split and refactoring capabilities
+
+### Summary
+Added AST-based dependency analysis, git operations management, smart context
+chunking, multi-repo workspace management, and a refactoring engine for module
+and symbol moves with automatic import rewriting. Includes 3 new skills
+(repo-split, dependency-map, migrate-module), new REPL commands (/analyze,
+/workspace, /split), new CLI commands (genai analyze, genai workspace), and
+full documentation of capabilities and limitations.
+
+Zero new external dependencies — everything uses Python stdlib (ast, graphlib,
+pathlib, subprocess).
+
+### Files Changed
+
+**New modules (5):**
+- `src/genai_cli/analyzer.py` — AST-based dependency analyzer with cycle detection, module classification, and clustering
+- `src/genai_cli/git_ops.py` — Safe git CLI wrapper (init, add, commit, branch, mv, rm, checkpoint, rollback)
+- `src/genai_cli/chunker.py` — Smart context chunker with file prioritization and greedy bin-packing
+- `src/genai_cli/workspace.py` — Multi-repo workspace manager with cross-repo file moves
+- `src/genai_cli/refactor_ops.py` — Refactoring engine for module/symbol moves with import rewriting
+
+**New tests (5):**
+- `tests/test_analyzer.py` — 22 tests across 10 test classes
+- `tests/test_git_ops.py` — 17 tests across 6 test classes
+- `tests/test_chunker.py` — 11 tests across 5 test classes
+- `tests/test_workspace.py` — 14 tests across 5 test classes
+- `tests/test_refactor_ops.py` — 10 tests across 6 test classes
+
+**New skills (3):**
+- `skills/repo-split/SKILL.md` — Guided monorepo splitting workflow (category: architecture)
+- `skills/dependency-map/SKILL.md` — Dependency analysis and visualization (category: analysis)
+- `skills/migrate-module/SKILL.md` — Module/symbol migration with import rewriting (category: refactoring)
+
+**New documentation (1):**
+- `docs/capabilities.md` — Model support matrix, capabilities, limitations, and repo-split guide
+
+**Modified files (4):**
+- `src/genai_cli/models.py` — Added `workspace_dir` field to AppSettings
+- `src/genai_cli/repl.py` — Added /analyze, /workspace, /split commands with handlers and tab completion
+- `src/genai_cli/cli.py` — Added `genai analyze` command and `genai workspace` command group (init, add, list, switch)
+- `README.md` — Added new commands to tables, 3 new skills, Capabilities & Limitations section, Code Analysis & Refactoring section, Multi-Repo Workspaces section
+
+### Rationale
+Users need to split monorepos and refactor code across repositories. This
+requires understanding dependency graphs, managing git operations safely,
+fitting large codebases into AI context windows, and tracking multiple repos
+as a unified workspace. All five modules are designed with clear dependency
+layering: analyzer and git_ops have no internal deps, chunker depends on
+analyzer and bundler, workspace depends on analyzer and git_ops, and
+refactor_ops depends on all above plus applier.
+
+### Behavior / Compatibility Implications
+- `workspace_dir` is a new optional field on AppSettings (default: empty string)
+- `/analyze`, `/workspace`, `/split` are new REPL commands — no impact on existing commands
+- `genai analyze` and `genai workspace` are new CLI commands — no impact on existing commands
+- 3 new bundled skills are auto-discovered alongside existing 14 skills
+- No new external dependencies
+
+### Testing Recommendations
+- `make test` — 74 new tests across 5 test files should pass alongside existing tests
+- `genai analyze src/` — should print dependency report
+- `/analyze src/genai_cli/` in REPL — same via REPL command
+- `genai analyze src/ --format json --output /tmp/deps.json` — JSON output
+- `/workspace add main .` then `/workspace list` — workspace management
+- `/skills` should list 3 new skills (repo-split, dependency-map, migrate-module)
+
+### Follow-ups
+- [ ] Add cross-language dependency analysis (JavaScript/TypeScript)
+- [ ] Add merge/rebase support to git_ops
+- [ ] Add test verification step after refactoring
+
+---
+
 ## 2026-02-09 | feat: Add /bundle command and SEARCH/REPLACE to missing prompts
 
 ### Summary

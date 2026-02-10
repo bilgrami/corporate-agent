@@ -582,5 +582,147 @@ def prompt_show(ctx: click.Context, name: str) -> None:
     display._console.print(Markdown(body))
 
 
+@main.command("analyze")
+@click.argument("paths", nargs=-1, required=True)
+@click.option(
+    "--format", "-f", "output_format", default="text",
+    type=click.Choice(["text", "json"]),
+    help="Output format: text or json",
+)
+@click.option("--output", "-o", "output_file", default=None, help="Write output to file")
+@click.pass_context
+def analyze_cmd(
+    ctx: click.Context,
+    paths: tuple[str, ...],
+    output_format: str,
+    output_file: str | None,
+) -> None:
+    """Analyze Python code dependencies."""
+    import json
+
+    from genai_cli.analyzer import DependencyAnalyzer
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    analyzer = DependencyAnalyzer(config, display)
+    report = analyzer.analyze(list(paths))
+
+    if output_format == "json":
+        result = json.dumps(analyzer.to_dict(report), indent=2)
+    else:
+        result = analyzer.format_report(report)
+
+    if output_file:
+        from pathlib import Path
+
+        Path(output_file).write_text(result)
+        display.print_success(f"Analysis written to {output_file}")
+    else:
+        if output_format == "json":
+            click.echo(result)
+        else:
+            display.print_message(result, role="assistant")
+
+
+@main.group("workspace")
+@click.pass_context
+def workspace_cmd(ctx: click.Context) -> None:
+    """Manage multi-repo workspaces."""
+
+
+@workspace_cmd.command("init")
+@click.argument("name")
+@click.option("--root", default=".", help="Workspace root directory")
+@click.pass_context
+def workspace_init(ctx: click.Context, name: str, root: str) -> None:
+    """Initialize a new workspace."""
+    from pathlib import Path
+
+    from genai_cli.workspace import WorkspaceManager
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    ws_mgr = WorkspaceManager(config, display)
+    ws_mgr.create_workspace(name, Path(root).resolve())
+
+
+@workspace_cmd.command("add")
+@click.argument("name")
+@click.argument("path")
+@click.pass_context
+def workspace_add(ctx: click.Context, name: str, path: str) -> None:
+    """Add a repository to the workspace."""
+    from pathlib import Path
+
+    from genai_cli.workspace import WorkspaceManager
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    ws_mgr = WorkspaceManager(config, display)
+    loaded = ws_mgr.load_workspace(Path.cwd())
+    if not loaded:
+        display.print_error("No workspace found. Run 'genai workspace init' first.")
+        sys.exit(1)
+    ws_mgr.add_repo(name, path)
+
+
+@workspace_cmd.command("list")
+@click.pass_context
+def workspace_list(ctx: click.Context) -> None:
+    """List repositories in the workspace."""
+    from pathlib import Path
+
+    from genai_cli.workspace import WorkspaceManager
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    ws_mgr = WorkspaceManager(config, display)
+    loaded = ws_mgr.load_workspace(Path.cwd())
+    if not loaded:
+        display.print_info("No workspace found.")
+        return
+
+    repos = ws_mgr.list_repos()
+    if not repos:
+        display.print_info("No repos in workspace.")
+        return
+
+    from rich.table import Table
+
+    table = Table(title=f"Workspace: {loaded.name}")
+    table.add_column("Name", style="cyan")
+    table.add_column("Path")
+    table.add_column("Active")
+
+    for r in repos:
+        table.add_row(r.name, r.path, "*" if r.is_active else "")
+
+    display._console.print(table)
+
+
+@workspace_cmd.command("switch")
+@click.argument("name")
+@click.pass_context
+def workspace_switch(ctx: click.Context, name: str) -> None:
+    """Switch the active repository."""
+    from pathlib import Path
+
+    from genai_cli.workspace import WorkspaceManager
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    ws_mgr = WorkspaceManager(config, display)
+    loaded = ws_mgr.load_workspace(Path.cwd())
+    if not loaded:
+        display.print_error("No workspace found.")
+        sys.exit(1)
+    ws_mgr.switch_repo(name)
+
+
 if __name__ == "__main__":
     main()

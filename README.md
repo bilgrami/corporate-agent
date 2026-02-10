@@ -101,6 +101,9 @@ You> /quit
 | `/agent [rounds]` | Enable agent mode for next message |
 | `/skill <name>` | Invoke a skill |
 | `/skills` | List available skills |
+| `/analyze <paths>` | Analyze code dependencies |
+| `/workspace <cmd>` | Manage multi-repo workspaces (add, remove, list, switch) |
+| `/split` | Start repo-split workflow |
 | `/quit` | Save session and exit |
 
 ## One-Shot Commands
@@ -155,6 +158,9 @@ genai skill list       # CLI
 | `executing-plans` | Execute plans step by step |
 | `requesting-code-review` | Pre-merge review process |
 | `brainstorming` | Design ideation methodology |
+| `repo-split` | Split a monorepo into multiple repositories |
+| `dependency-map` | Analyze and visualize module dependencies |
+| `migrate-module` | Move modules/symbols with automatic import rewriting |
 
 ### Invoke a Skill
 
@@ -285,6 +291,11 @@ Token usage is displayed after each message with color-coded status:
 | `genai resume <session_id>` | Resume a saved conversation |
 | `genai skill list` | List all available skills |
 | `genai skill invoke <name>` | Invoke a skill by name |
+| `genai analyze <paths>` | Analyze Python code dependencies |
+| `genai workspace init <name>` | Initialize a multi-repo workspace |
+| `genai workspace add <name> <path>` | Add a repo to the workspace |
+| `genai workspace list` | List repos in the workspace |
+| `genai workspace switch <name>` | Switch active repo |
 
 ## Global Flags
 
@@ -404,3 +415,60 @@ is under the size limit for its type. Binary files are automatically excluded.
 
 **Changes not applied**: Ensure the file path in the AI response matches a
 real path relative to your project root. Check `blocked_write_patterns`.
+
+## Capabilities & Limitations
+
+See [docs/capabilities.md](docs/capabilities.md) for a complete reference on
+model support, context windows, and what each feature can and cannot do.
+
+## Code Analysis & Refactoring
+
+GenAI CLI includes AST-based dependency analysis and refactoring tools:
+
+```bash
+# Analyze dependencies
+genai analyze src/ --format text
+genai analyze src/ --format json --output deps.json
+
+# In REPL
+/analyze src/genai_cli/
+```
+
+Use the `dependency-map` skill for AI-assisted analysis:
+
+```bash
+/files src/
+/skill dependency-map
+```
+
+Use the `migrate-module` skill to move modules with automatic import rewriting:
+
+```bash
+/files src/
+/skill migrate-module
+```
+
+## Multi-Repo Workspaces
+
+Manage multiple repositories as a single workspace:
+
+```bash
+# CLI
+genai workspace init my-project
+genai workspace add backend ./backend
+genai workspace add frontend ./frontend
+genai workspace list
+genai workspace switch backend
+
+# REPL
+/workspace add backend ./backend
+/workspace list
+/workspace switch frontend
+```
+
+Use the `repo-split` skill for guided repository splitting:
+
+```bash
+/files src/
+/split
+```

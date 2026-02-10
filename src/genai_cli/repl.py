@@ -56,6 +56,9 @@ class SlashCompleter(Completer):
         "/skills": "List available skills",
         "/rewind": "Undo last N turns",
         "/export": "Export session to file or clipboard",
+        "/analyze": "Analyze code dependencies",
+        "/workspace": "Manage multi-repo workspaces",
+        "/split": "Start repo-split workflow",
         "/quit": "Save session and exit",
         "/exit": "Exit the REPL (alias for /quit)",
         "/q": "Alias for /quit",
@@ -131,7 +134,12 @@ class SlashCompleter(Completer):
             except Exception:
                 pass
 
-        elif cmd in ("/files", "/bundle"):
+        elif cmd == "/workspace":
+            for opt in ("add", "remove", "list", "switch"):
+                if opt.startswith(arg_text):
+                    yield Completion(opt, start_position=-len(arg_text))
+
+        elif cmd in ("/files", "/bundle", "/analyze"):
             sub_doc = Document(arg_text, len(arg_text))
             yield from self._path_completer.get_completions(
                 sub_doc, complete_event
@@ -275,6 +283,9 @@ class ReplSession:
             "/skills": self._handle_skills,
             "/rewind": lambda: self._handle_rewind(arg),
             "/export": lambda: self._handle_export(arg),
+            "/analyze": lambda: self._handle_analyze(arg),
+            "/workspace": lambda: self._handle_workspace(arg),
+            "/split": lambda: self._handle_split(arg),
             "/quit": self._handle_quit,
             "/exit": self._handle_quit,
             "/q": self._handle_quit,
@@ -311,6 +322,9 @@ class ReplSession:
   /skills            List available skills
   /rewind [n]        Undo last N turns (default: 1)
   /export [file]     Export session to file or clipboard
+  /analyze <paths>   Analyze code dependencies
+  /workspace <cmd>   Manage workspaces (add, remove, list, switch)
+  /split             Start repo-split workflow
   /quit              Save session and exit
   /exit              Alias for /quit"""
         self._display.print_info(help_text)
@@ -750,6 +764,110 @@ class ReplSession:
             return True
         except (FileNotFoundError, subprocess.SubprocessError):
             return False
+
+    def _handle_analyze(self, arg: str) -> None:
+        """Analyze code dependencies."""
+        if not arg:
+            self._display.print_info("Usage: /analyze <paths>")
+            return
+
+        try:
+            paths = shlex.split(arg)
+        except ValueError:
+            paths = arg.split()
+
+        from genai_cli.analyzer import DependencyAnalyzer
+
+        analyzer = DependencyAnalyzer(self._config, self._display)
+        report = analyzer.analyze(paths)
+        text = analyzer.format_report(report)
+        self._display.print_message(text, role="assistant")
+
+    def _handle_workspace(self, arg: str) -> None:
+        """Manage multi-repo workspaces."""
+        from genai_cli.workspace import WorkspaceManager
+
+        ws_mgr = WorkspaceManager(self._config, self._display)
+
+        parts = arg.split(maxsplit=1) if arg else []
+        subcmd = parts[0] if parts else ""
+        subarg = parts[1] if len(parts) > 1 else ""
+
+        if subcmd == "add":
+            ws_path = Path.cwd()
+            ws_file = ws_path / WorkspaceManager.WORKSPACE_FILE
+            if not ws_file.is_file():
+                ws_mgr.create_workspace("default", ws_path)
+            else:
+                ws_mgr.load_workspace(ws_path)
+
+            name_and_path = subarg.split(maxsplit=1) if subarg else []
+            if len(name_and_path) < 2:
+                self._display.print_info(
+                    "Usage: /workspace add <name> <path>"
+                )
+                return
+            ws_mgr.add_repo(name_and_path[0], name_and_path[1])
+
+        elif subcmd == "remove":
+            if not subarg:
+                self._display.print_info(
+                    "Usage: /workspace remove <name>"
+                )
+                return
+            ws_mgr.load_workspace(Path.cwd())
+            ws_mgr.remove_repo(subarg)
+
+        elif subcmd == "list":
+            loaded = ws_mgr.load_workspace(Path.cwd())
+            if not loaded:
+                self._display.print_info("No workspace found.")
+                return
+            repos = ws_mgr.list_repos()
+            if not repos:
+                self._display.print_info("No repos in workspace.")
+                return
+            self._display.print_info("Workspace repos:")
+            for r in repos:
+                marker = " *" if r.is_active else ""
+                self._display.print_info(
+                    f"  {r.name:20s} {r.path}{marker}"
+                )
+
+        elif subcmd == "switch":
+            if not subarg:
+                self._display.print_info(
+                    "Usage: /workspace switch <name>"
+                )
+                return
+            ws_mgr.load_workspace(Path.cwd())
+            ws_mgr.switch_repo(subarg)
+
+        else:
+            self._display.print_info(
+                "Usage: /workspace <add|remove|list|switch> [args]"
+            )
+
+    def _handle_split(self, arg: str) -> None:
+        """Start the repo-split workflow via the repo-split skill."""
+        from genai_cli.skills.executor import SkillExecutor
+        from genai_cli.skills.registry import SkillRegistry
+
+        registry = SkillRegistry(self._config)
+        executor = SkillExecutor(self._config, self._display, registry)
+
+        files = list(self._queued_files) if self._queued_files else None
+        self._queued_files.clear()
+
+        result = executor.execute(
+            "repo-split",
+            files=files,
+            auto_apply=self._auto_apply,
+        )
+        if result:
+            self._display.print_info(
+                f"Repo-split completed: {len(result.rounds)} rounds"
+            )
 
     def _handle_quit(self) -> None:
         """Save session and exit."""
