@@ -74,6 +74,8 @@ class ConfigManager:
         self._models: dict[str, ModelInfo] = {}
         self._headers: dict[str, str] = {}
         self._system_prompt: str = ""
+        self._active_prompt_name: str = "default"
+        self._active_prompt_body: str | None = None
         self._api_format: dict[str, Any] = {}
         self._mapper: ResponseMapper | None = None
         self._load()
@@ -232,8 +234,25 @@ class ConfigManager:
         return headers
 
     def get_system_prompt(self) -> str:
-        """Return the system prompt with {agent_name} substituted."""
+        """Return the active prompt body, or the default system prompt."""
+        if self._active_prompt_body is not None:
+            return self._active_prompt_body
         return self._system_prompt
+
+    @property
+    def active_prompt_name(self) -> str:
+        """Return the name of the active prompt profile."""
+        return self._active_prompt_name
+
+    def set_active_prompt(self, name: str, body: str) -> None:
+        """Switch the active system prompt."""
+        self._active_prompt_name = name
+        self._active_prompt_body = body
+
+    def clear_active_prompt(self) -> None:
+        """Reset to the default system prompt from config/system_prompt.yaml."""
+        self._active_prompt_name = "default"
+        self._active_prompt_body = None
 
     @property
     def raw(self) -> dict[str, Any]:

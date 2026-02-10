@@ -129,3 +129,25 @@ class TestConfigManager:
         settings = mock_config.settings
         assert len(settings.exclude_patterns) > 0
         assert "**/__pycache__/**" in settings.exclude_patterns
+
+    def test_active_prompt_default(self, mock_config: ConfigManager) -> None:
+        assert mock_config.active_prompt_name == "default"
+
+    def test_set_active_prompt(self, mock_config: ConfigManager) -> None:
+        mock_config.set_active_prompt("reviewer", "You are a reviewer.")
+        assert mock_config.active_prompt_name == "reviewer"
+        assert mock_config.get_system_prompt() == "You are a reviewer."
+
+    def test_clear_active_prompt(self, mock_config: ConfigManager) -> None:
+        mock_config.set_active_prompt("reviewer", "You are a reviewer.")
+        mock_config.clear_active_prompt()
+        assert mock_config.active_prompt_name == "default"
+        # Should fall back to the original system prompt
+        prompt = mock_config.get_system_prompt()
+        assert "AI coding assistant" in prompt
+
+    def test_get_system_prompt_without_active(self, mock_config: ConfigManager) -> None:
+        """Backward compat: no active prompt set returns original system prompt."""
+        prompt = mock_config.get_system_prompt()
+        assert "AI coding assistant" in prompt
+        assert "{agent_name}" not in prompt

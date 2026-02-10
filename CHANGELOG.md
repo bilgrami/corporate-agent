@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-10 | feat: Add prompt profile switching and bundled prompt registry
+
+### Summary
+Added active prompt profile switching to ConfigManager and a prompt registry/loader
+system with 5 bundled prompt profiles (default, code-changes, reviewer, planner,
+minimal). Users can switch system prompts via `/prompt <name>` in the REPL or
+`--prompt` on the CLI.
+
+### Files Changed
+
+**New modules (3):**
+- `src/genai_cli/prompts/__init__.py` — Prompt registry package exports
+- `src/genai_cli/prompts/loader.py` — Prompt loader with YAML frontmatter parsing
+- `src/genai_cli/prompts/registry.py` — Prompt registry with 3-location discovery (project > user > bundled)
+
+**New prompt profiles (5):**
+- `prompts/default/PROMPT.md` — Default general-purpose system prompt
+- `prompts/code-changes/PROMPT.md` — Code changes focused prompt
+- `prompts/reviewer/PROMPT.md` — Code review focused prompt
+- `prompts/planner/PROMPT.md` — Planning and architecture prompt
+- `prompts/minimal/PROMPT.md` — Minimal, concise prompt
+
+**Modified files (2):**
+- `src/genai_cli/config.py` — Added `_active_prompt_name`, `_active_prompt_body`, `set_active_prompt()`, `clear_active_prompt()`, `active_prompt_name` property, and updated `get_system_prompt()` to return active prompt if set
+- `tests/test_config.py` — Added 4 tests for active prompt switching (set, clear, default fallback, property)
+
+### Rationale
+The prompt profiles system lets users tailor the AI's behavior for different tasks
+(reviewing, planning, coding) without manually editing config files. The registry
+uses the same 3-location discovery pattern as the skills system, and the config-level
+switching integrates cleanly with the existing `get_system_prompt()` API.
+
+### Behavior / Compatibility Implications
+- `get_system_prompt()` now returns the active prompt body if one is set, otherwise falls back to the default system prompt from config
+- `set_active_prompt(name, body)` and `clear_active_prompt()` are new methods on ConfigManager
+- `active_prompt_name` is a new read-only property on ConfigManager
+- No changes to existing behavior when no active prompt is set
+
+### Testing Recommendations
+- `make test` — 4 new tests for active prompt switching should pass alongside existing tests
+- `genai prompt list` — shows all 5 bundled prompts
+- `genai prompt show default` — renders full prompt body
+
+### Follow-ups
+- [ ] Add `/prompt` REPL command for interactive switching
+- [ ] Add `--prompt` CLI flag to `genai ask`
+- [ ] Prompt composition — combine multiple profiles
+
+---
+
 ## 2026-02-10 | feat: Add repo-split and refactoring capabilities
 
 ### Summary
