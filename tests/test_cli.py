@@ -133,3 +133,61 @@ class TestCLI:
                 main, ["config", "set", "auto_apply", "true"]
             )
         assert result.exit_code == 0
+
+
+class TestBundleCLI:
+    """Tests for genai bundle subcommand."""
+
+    def test_bundle_creates_file(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """genai bundle <path> creates bundle.txt."""
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "app.py").write_text("print('hello')\n")
+
+        output_path = tmp_path / "bundle.txt"
+        result = runner.invoke(
+            main, ["bundle", str(src), "--output", str(output_path)]
+        )
+        assert result.exit_code == 0
+        assert output_path.exists()
+        content = output_path.read_text()
+        assert "===== FILE:" in content
+        assert "Bundled" in result.output
+
+    def test_bundle_with_type_filter(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """genai bundle --type code filters to code files only."""
+        src = tmp_path / "proj"
+        src.mkdir()
+        (src / "app.py").write_text("x = 1\n")
+        (src / "readme.md").write_text("# Hi\n")
+
+        output_path = tmp_path / "bundle.txt"
+        result = runner.invoke(
+            main, ["bundle", str(src), "--output", str(output_path), "--type", "code"]
+        )
+        assert result.exit_code == 0
+        content = output_path.read_text()
+        assert "app.py" in content
+        assert "readme.md" not in content
+
+    def test_bundle_no_files_warning(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """genai bundle with empty dir shows warning."""
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        output_path = tmp_path / "bundle.txt"
+        result = runner.invoke(
+            main, ["bundle", str(empty), "--output", str(output_path)]
+        )
+        assert result.exit_code == 0
+        assert "No files found" in result.output
+
+    def test_bundle_help(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["bundle", "--help"])
+        assert result.exit_code == 0
+        assert "Bundle files" in result.output

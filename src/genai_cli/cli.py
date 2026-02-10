@@ -20,6 +20,7 @@ pass_config = click.make_pass_decorator(ConfigManager, ensure=True)
 
 @click.group(invoke_without_command=True)
 @click.option("--model", "-m", default=None, help="Override model for this invocation")
+@click.option("--prompt", "-p", "prompt_name", default=None, help="System prompt profile to use")
 @click.option("--session-id", default=None, help="Reuse an existing session ID (e.g., from web UI)")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.option("--config", "-c", "config_path", default=None, help="Custom config file")
@@ -29,6 +30,7 @@ pass_config = click.make_pass_decorator(ConfigManager, ensure=True)
 def main(
     ctx: click.Context,
     model: str | None,
+    prompt_name: str | None,
     session_id: str | None,
     verbose: bool,
     config_path: str | None,
@@ -42,13 +44,25 @@ def main(
         overrides["verbose"] = True
 
     ctx.ensure_object(dict)
-    ctx.obj["config"] = ConfigManager(
-        config_path=config_path, cli_overrides=overrides
-    )
+    config = ConfigManager(config_path=config_path, cli_overrides=overrides)
+    ctx.obj["config"] = config
     ctx.obj["display"] = Display()
     ctx.obj["verbose"] = verbose
     ctx.obj["json_out"] = json_out
     ctx.obj["session_id"] = session_id
+
+    # Activate prompt profile if specified
+    if prompt_name:
+        from genai_cli.prompts.registry import PromptRegistry
+
+        registry = PromptRegistry(config)
+        agent_name = config.settings.agent_name
+        body = registry.load_prompt_body(prompt_name, agent_name)
+        if body is None:
+            click.echo(f"Error: unknown prompt profile '{prompt_name}'", err=True)
+            ctx.exit(1)
+            return
+        config.set_active_prompt(prompt_name, body)
 
     if ctx.invoked_subcommand is None:
         from genai_cli.repl import ReplSession
@@ -375,6 +389,48 @@ def files_cmd(ctx: click.Context, paths: tuple[str, ...], file_type: str) -> Non
         display.print_file_list(bundle.file_paths)
 
 
+@main.command("bundle")
+@click.argument("paths", nargs=-1, required=True)
+@click.option(
+    "--output", "-o", default="bundle.txt",
+    help="Output file path (default: bundle.txt)",
+)
+@click.option(
+    "--type", "-t", "file_type", default="all",
+    help="File type filter: code|docs|scripts|notebooks|all",
+)
+@click.pass_context
+def bundle_cmd(
+    ctx: click.Context, paths: tuple[str, ...], output: str, file_type: str
+) -> None:
+    """Bundle files into a single .txt file for upload."""
+    from pathlib import Path
+
+    from genai_cli.bundler import FileBundler
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    bundler = FileBundler(config)
+    ft = file_type if file_type != "all" else None
+    output_path = Path(output)
+
+    file_count, total_bytes, unmatched = bundler.write_bundle(
+        list(paths), output_path, file_type=ft
+    )
+
+    if unmatched:
+        display.print_warning(f"No files found for: {', '.join(unmatched)}")
+
+    if file_count == 0:
+        display.print_warning("No files found matching criteria")
+        return
+
+    display.print_success(
+        f"Bundled {file_count} file(s) ({total_bytes:,} bytes) → {output_path}"
+    )
+
+
 @main.command("resume")
 @click.argument("session_id")
 @click.pass_context
@@ -465,6 +521,65 @@ def skill_invoke(
             f"\nSkill completed: {len(result.rounds)} rounds, "
             f"{len(result.total_files_applied)} files modified"
         )
+
+
+@main.group("prompt")
+@click.pass_context
+def prompt_cmd(ctx: click.Context) -> None:
+    """Manage system prompt profiles."""
+
+
+@prompt_cmd.command("list")
+@click.pass_context
+def prompt_list(ctx: click.Context) -> None:
+    """List all available prompt profiles."""
+    from genai_cli.prompts.registry import PromptRegistry
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    registry = PromptRegistry(config)
+    prompts = registry.list_prompts()
+    if not prompts:
+        display.print_warning("No prompts found")
+        return
+
+    from rich.table import Table
+
+    table = Table(title="Available Prompt Profiles")
+    table.add_column("Name", style="cyan")
+    table.add_column("Category")
+    table.add_column("Description")
+
+    active = config.active_prompt_name
+    for p in prompts:
+        name = f"* {p.name}" if p.name == active else p.name
+        desc = p.description[:60] + "..." if len(p.description) > 60 else p.description
+        table.add_row(name, p.category, desc.strip())
+
+    display._console.print(table)
+
+
+@prompt_cmd.command("show")
+@click.argument("name")
+@click.pass_context
+def prompt_show(ctx: click.Context, name: str) -> None:
+    """Display the full body of a prompt profile."""
+    from genai_cli.prompts.registry import PromptRegistry
+
+    config: ConfigManager = ctx.obj["config"]
+    display: Display = ctx.obj["display"]
+
+    registry = PromptRegistry(config)
+    agent_name = config.settings.agent_name
+    body = registry.load_prompt_body(name, agent_name)
+    if body is None:
+        display.print_error(f"Prompt not found: {name}")
+        return
+
+    from rich.markdown import Markdown
+
+    display._console.print(Markdown(body))
 
 
 if __name__ == "__main__":

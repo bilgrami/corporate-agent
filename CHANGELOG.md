@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-09 | feat: Add /bundle command and SEARCH/REPLACE to missing prompts
+
+### Summary
+Added a new `/bundle` command (REPL + CLI) that bundles source files into a single
+`bundle.txt` file for manual review or upload. The bundle uses relative paths and
+a self-documenting header. Also added the full SEARCH/REPLACE format specification
+to the `debugger` and `project-manager` prompts, which were missing it. Added a
+"File Bundle Format" section to the system prompt so the AI can parse uploaded bundles.
+
+### Files Changed
+- `src/genai_cli/bundler.py` — Added `write_bundle()` method and `_read_notebook()` helper
+- `src/genai_cli/repl.py` — Added `/bundle` slash command (completer, dispatch, handler, help text)
+- `src/genai_cli/cli.py` — Added `genai bundle` CLI subcommand with `--output` and `--type` options
+- `config/system_prompt.yaml` — Added "Uploaded File Bundles" section after SEARCH/REPLACE
+- `prompts/debugger/PROMPT.md` — Added full SEARCH/REPLACE format section before CHANGELOG
+- `prompts/project-manager/PROMPT.md` — Added full SEARCH/REPLACE format section before CHANGELOG
+- `tests/test_bundler.py` — Added 6 tests for `write_bundle()` (TestWriteBundle)
+- `tests/test_repl.py` — Added 5 tests for `/bundle` command (TestBundleCommand)
+- `tests/test_cli.py` — Added 4 tests for `genai bundle` CLI (TestBundleCLI)
+- `CHANGELOG.md` — This entry
+
+### Rationale
+Users need a save-to-disk step before uploading bundles so they can review or
+manually upload. The debugger and project-manager prompts produce code changes
+but lacked the SEARCH/REPLACE format spec, causing inconsistent output.
+
+### Behavior / Compatibility Implications
+- `/bundle` is a new command — no impact on existing commands
+- `genai bundle` is a new CLI subcommand — no impact on existing subcommands
+- Debugger and project-manager prompts now include SEARCH/REPLACE instructions
+- No changes to existing bundle_files() or upload behavior
+
+### Testing Recommendations
+- `pytest tests/test_bundler.py tests/test_repl.py tests/test_cli.py -v --no-cov` — 126 tests passing
+- `pytest tests/test_prompt_loader.py tests/test_prompt_registry.py -v --no-cov` — 21 tests passing
+- `genai bundle src/` — creates `bundle.txt` in cwd
+- `genai prompt show debugger` — shows SEARCH/REPLACE section
+
+### Follow-ups
+- [ ] Add `--exclude` option to bundle command for custom exclusion patterns
+- [ ] Support unbundling (extracting files from a bundle.txt)
+
+---
+
 ## 2026-02-09 | feat: Add 5 new bundled system prompt profiles
 
 ### Summary

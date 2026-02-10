@@ -537,3 +537,69 @@ class TestFilesSystemPrompt:
         output = display._file.getvalue()  # type: ignore[union-attr]
         assert "Files uploaded" in output
         assert "Context init failed" in output
+
+
+class TestBundleCommand:
+    """Tests for /bundle slash command."""
+
+    def test_bundle_no_args_shows_usage(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        """/bundle with no args prints usage."""
+        repl._handle_command("/bundle")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Usage" in output
+
+    def test_bundle_creates_file(
+        self, repl: ReplSession, sample_project_dir: Path, display: Display, tmp_path: Path
+    ) -> None:
+        """/bundle <path> creates bundle.txt on disk."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            repl._handle_command(f"/bundle {sample_project_dir / 'src'}")
+            output = display._file.getvalue()  # type: ignore[union-attr]
+            assert "Bundled" in output
+            assert (tmp_path / "bundle.txt").exists()
+        finally:
+            os.chdir(old_cwd)
+
+    def test_bundle_no_upload_called(
+        self, repl: ReplSession, sample_project_dir: Path, tmp_path: Path
+    ) -> None:
+        """/bundle does NOT call upload_bundles (save-only)."""
+        mock_client = MagicMock()
+        repl._client = mock_client
+
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            repl._handle_command(f"/bundle {sample_project_dir / 'src'}")
+            assert not mock_client.upload_bundles.called
+        finally:
+            os.chdir(old_cwd)
+
+    def test_bundle_unmatched_warning(
+        self, repl: ReplSession, display: Display, tmp_path: Path
+    ) -> None:
+        """/bundle with nonexistent path shows warning."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            repl._handle_command(f"/bundle {tmp_path}/nonexistent.py")
+            output = display._file.getvalue()  # type: ignore[union-attr]
+            assert "No files found" in output or "No supported files" in output
+        finally:
+            os.chdir(old_cwd)
+
+    def test_bundle_in_completer(self, repl_config: ConfigManager) -> None:
+        """/bundle appears in slash command completions."""
+        from genai_cli.session import SessionManager
+
+        completer = SlashCompleter(repl_config, SessionManager(repl_config))
+        doc = Document("/bu", 3)
+        results = [c.text for c in completer.get_completions(doc, CompleteEvent())]
+        assert "/bundle" in results

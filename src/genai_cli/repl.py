@@ -38,6 +38,7 @@ class SlashCompleter(Completer):
         "/model": "Show or switch model",
         "/models": "List all available models",
         "/files": "Queue files for next message",
+        "/bundle": "Bundle files into a single .txt file",
         "/clear": "Clear session, start fresh",
         "/fresh": "Alias for /clear",
         "/compact": "Summarize to reduce tokens",
@@ -49,6 +50,8 @@ class SlashCompleter(Completer):
         "/config": "View or update settings",
         "/auto-apply": "Toggle auto-apply mode",
         "/agent": "Enable agent mode",
+        "/prompt": "Show or switch system prompt profile",
+        "/prompts": "List available prompt profiles",
         "/skill": "Invoke a skill",
         "/skills": "List available skills",
         "/rewind": "Undo last N turns",
@@ -98,6 +101,21 @@ class SlashCompleter(Completer):
                 if opt.startswith(arg_text):
                     yield Completion(opt, start_position=-len(arg_text))
 
+        elif cmd == "/prompt":
+            try:
+                from genai_cli.prompts.registry import PromptRegistry
+
+                registry = PromptRegistry(self._config)
+                for p in registry.list_prompts():
+                    if p.name.startswith(arg_text):
+                        yield Completion(
+                            p.name,
+                            start_position=-len(arg_text),
+                            display_meta=p.description.strip()[:40],
+                        )
+            except Exception:
+                pass
+
         elif cmd == "/skill":
             try:
                 from genai_cli.skills.registry import SkillRegistry
@@ -113,7 +131,7 @@ class SlashCompleter(Completer):
             except Exception:
                 pass
 
-        elif cmd == "/files":
+        elif cmd in ("/files", "/bundle"):
             sub_doc = Document(arg_text, len(arg_text))
             yield from self._path_completer.get_completions(
                 sub_doc, complete_event
@@ -239,6 +257,7 @@ class ReplSession:
             "/model": lambda: self._handle_model(arg),
             "/models": self._handle_models,
             "/files": lambda: self._handle_files(arg),
+            "/bundle": lambda: self._handle_bundle(arg),
             "/clear": self._handle_clear,
             "/fresh": self._handle_clear,
             "/compact": self._handle_compact,
@@ -250,6 +269,8 @@ class ReplSession:
             "/config": lambda: self._handle_config(arg),
             "/auto-apply": lambda: self._handle_auto_apply(arg),
             "/agent": lambda: self._handle_agent(arg),
+            "/prompt": lambda: self._handle_prompt(arg),
+            "/prompts": self._handle_prompts,
             "/skill": lambda: self._handle_skill(arg),
             "/skills": self._handle_skills,
             "/rewind": lambda: self._handle_rewind(arg),
@@ -272,6 +293,7 @@ class ReplSession:
   /model [name]      List models or switch model
   /models            List all available models
   /files <paths>     Queue files for next message
+  /bundle <paths>    Bundle files into bundle.txt
   /clear             Clear session, start fresh
   /fresh             Alias for /clear
   /compact           Summarize conversation to reduce tokens
@@ -283,6 +305,8 @@ class ReplSession:
   /config [k] [v]    View or update settings
   /auto-apply [on|off]  Toggle auto-apply mode
   /agent [rounds]    Enable agent mode for next message
+  /prompt [name]     Show or switch system prompt profile
+  /prompts           List available prompt profiles
   /skill <name>      Invoke a skill
   /skills            List available skills
   /rewind [n]        Undo last N turns (default: 1)
@@ -387,6 +411,33 @@ class ReplSession:
                 self._display.print_warning(
                     f"Context init failed (upload succeeded): {e}"
                 )
+
+    def _handle_bundle(self, arg: str) -> None:
+        """Bundle files into a single .txt for upload."""
+        if not arg:
+            self._display.print_info("Usage: /bundle <paths>  (writes bundle.txt)")
+            return
+
+        try:
+            paths = shlex.split(arg)
+        except ValueError:
+            paths = arg.split()
+
+        output = Path.cwd() / "bundle.txt"
+        file_count, total_bytes, unmatched = self._bundler.write_bundle(paths, output)
+
+        if unmatched:
+            self._display.print_warning(
+                f"No files found for: {', '.join(unmatched)}"
+            )
+
+        if file_count == 0:
+            self._display.print_warning("No supported files found.")
+            return
+
+        self._display.print_success(
+            f"Bundled {file_count} file(s) ({total_bytes:,} bytes) → {output}"
+        )
 
     def _handle_clear(self) -> None:
         """Clear session and start fresh with a new API session."""
@@ -522,6 +573,47 @@ class ReplSession:
             f"Agent mode enabled for next message ({rounds} rounds). "
             "Type your message to start."
         )
+
+    def _handle_prompt(self, arg: str) -> None:
+        """Show or switch the active system prompt profile."""
+        if not arg:
+            self._display.print_info(
+                f"Active prompt: {self._config.active_prompt_name}"
+            )
+            return
+
+        from genai_cli.prompts.registry import PromptRegistry
+
+        registry = PromptRegistry(self._config)
+        prompt = registry.get_prompt(arg)
+        if prompt is None:
+            self._display.print_error(f"Unknown prompt: {arg}")
+            return
+
+        agent_name = self._config.settings.agent_name
+        body = registry.load_prompt_body(arg, agent_name)
+        if body is None:
+            self._display.print_error(f"Failed to load prompt: {arg}")
+            return
+
+        self._config.set_active_prompt(arg, body)
+        self._display.print_success(f"Switched to prompt: {arg}")
+
+    def _handle_prompts(self) -> None:
+        """List available prompt profiles."""
+        from genai_cli.prompts.registry import PromptRegistry
+
+        registry = PromptRegistry(self._config)
+        prompts = registry.list_prompts()
+        if not prompts:
+            self._display.print_info("No prompts found.")
+            return
+        active = self._config.active_prompt_name
+        self._display.print_info("Available prompts:")
+        for p in prompts:
+            marker = " *" if p.name == active else ""
+            desc = p.description.strip()[:60]
+            self._display.print_info(f"  {p.name:25s} {desc}{marker}")
 
     def _handle_skill(self, arg: str) -> None:
         """Invoke a skill."""

@@ -67,4 +67,9 @@ system_prompt: |
   - Order SEARCH/REPLACE blocks from top of file to bottom when making
     multiple edits to the same file.
 
+  ## Uploaded File Bundles
+  When files are uploaded as a bundle, each file is delimited by a marker line:
+    ===== FILE: <relative_path> =====
+  Use the relative path from the marker when referencing or editing bundled files.
+
 agent_name_placeholder: "{agent_name}"
