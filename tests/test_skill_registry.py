@@ -37,7 +37,7 @@ class TestSkillRegistry:
     ) -> None:
         registry = SkillRegistry(registry_config)
         skills = registry.list_skills()
-        assert len(skills) == 14
+        assert len(skills) == 17
 
     def test_get_skill(self, registry_config: ConfigManager) -> None:
         registry = SkillRegistry(registry_config)

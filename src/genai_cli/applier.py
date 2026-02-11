@@ -206,6 +206,12 @@ class ResponseParser:
             lang = match.group(1)
             path = match.group(2).strip()
             content = match.group(3)
+            # Skip invalid paths: code fence artifacts, bare language names,
+            # or strings with no path-like characters (/ or .)
+            if not path or path.startswith("```") or (
+                "/" not in path and "." not in path
+            ):
+                continue
             if path and path not in seen_paths:
                 blocks.append(CodeBlock(
                     file_path=path,

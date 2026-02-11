@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from genai_cli.applier import ApplyResult, FileApplier, UnifiedParser
@@ -54,6 +55,7 @@ class AgentLoop:
         auto_apply: bool = False,
         dry_run: bool = False,
         max_rounds: int = 5,
+        workspace_root: Path | None = None,
     ) -> None:
         self._config = config
         self._client = client
@@ -64,7 +66,7 @@ class AgentLoop:
         self._dry_run = dry_run
         self._max_rounds = max_rounds
         self._parser = UnifiedParser()
-        self._applier = FileApplier(config, display)
+        self._applier = FileApplier(config, display, project_root=workspace_root)
         self._bundler = FileBundler(config)
         self._session_mgr = SessionManager(config)
         self._stopped = False

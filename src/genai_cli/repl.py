@@ -62,6 +62,7 @@ class SlashCompleter(Completer):
         "/analyze": "Analyze code dependencies",
         "/workspace": "Manage multi-repo workspaces",
         "/split": "Start repo-split workflow",
+        "/target": "Set or show workspace root for edits",
         "/quit": "Save session and exit",
         "/exit": "Exit the REPL (alias for /quit)",
         "/q": "Alias for /quit",
@@ -142,7 +143,7 @@ class SlashCompleter(Completer):
                 if opt.startswith(arg_text):
                     yield Completion(opt, start_position=-len(arg_text))
 
-        elif cmd in ("/files", "/bundle", "/analyze"):
+        elif cmd in ("/files", "/bundle", "/analyze", "/target"):
             sub_doc = Document(arg_text, len(arg_text))
             yield from self._path_completer.get_completions(
                 sub_doc, complete_event
@@ -184,6 +185,7 @@ class ReplSession:
         self._model_name = config.settings.default_model
         self._agent_rounds: int = 0
         self._undo_stack: list[list[tuple[str, str]]] = []
+        self._workspace_root: Path | None = None
         self._running = False
 
         # Session ID resolution priority:
@@ -292,6 +294,7 @@ class ReplSession:
             "/analyze": lambda: self._handle_analyze(arg),
             "/workspace": lambda: self._handle_workspace(arg),
             "/split": lambda: self._handle_split(arg),
+            "/target": lambda: self._handle_target(arg),
             "/quit": self._handle_quit,
             "/exit": self._handle_quit,
             "/q": self._handle_quit,
@@ -333,6 +336,7 @@ class ReplSession:
   /analyze <paths>   Analyze code dependencies
   /workspace <cmd>   Manage workspaces (add, remove, list, switch)
   /split             Start repo-split workflow
+  /target [path]     Set or show workspace root for edits
   /quit              Save session and exit
   /exit              Alias for /quit"""
         self._display.print_info(help_text)
@@ -391,6 +395,31 @@ class ReplSession:
         if not bundles:
             self._display.print_warning("No supported files found.")
             return
+
+        # Auto-detect workspace root from bundled file paths
+        if not self._workspace_root:
+            all_paths = [
+                Path(p).resolve()
+                for b in bundles
+                for p in (b.source_paths if hasattr(b, "source_paths") else [])
+            ]
+            if not all_paths:
+                # Fallback: resolve the user-provided paths
+                for p in paths:
+                    resolved = Path(p).expanduser().resolve()
+                    if resolved.is_file():
+                        all_paths.append(resolved.parent)
+                    elif resolved.is_dir():
+                        all_paths.append(resolved)
+            if all_paths:
+                common = all_paths[0]
+                for ap in all_paths[1:]:
+                    while common != ap and common not in ap.parents:
+                        common = common.parent
+                self._workspace_root = common
+                self._display.print_info(
+                    f"Workspace root auto-set: {common}"
+                )
 
         for bundle in bundles:
             self._display.print_bundle_summary(
@@ -477,6 +506,25 @@ class ReplSession:
         if file_count == 0:
             self._display.print_warning("No supported files found.")
             return
+
+        # Auto-detect workspace root from bundled paths
+        if not self._workspace_root and file_count > 0:
+            resolved_paths: list[Path] = []
+            for p in paths:
+                rp = Path(p).expanduser().resolve()
+                if rp.is_file():
+                    resolved_paths.append(rp.parent)
+                elif rp.is_dir():
+                    resolved_paths.append(rp)
+            if resolved_paths:
+                common = resolved_paths[0]
+                for rp in resolved_paths[1:]:
+                    while common != rp and common not in rp.parents:
+                        common = common.parent
+                self._workspace_root = common
+                self._display.print_info(
+                    f"Workspace root auto-set: {common}"
+                )
 
         self._display.print_success(
             f"Bundled {file_count} file(s) ({total_bytes:,} bytes) → {output}"
@@ -965,6 +1013,28 @@ class ReplSession:
                 f"Repo-split completed: {len(result.rounds)} rounds"
             )
 
+    def _handle_target(self, arg: str) -> None:
+        """Set or show workspace root for edits."""
+        if not arg:
+            if self._workspace_root:
+                self._display.print_info(
+                    f"Workspace root: {self._workspace_root}"
+                )
+            else:
+                self._display.print_info(
+                    "No workspace root set (using cwd). "
+                    "Usage: /target <path>"
+                )
+            return
+
+        target = Path(arg).expanduser().resolve()
+        if not target.is_dir():
+            self._display.print_error(f"Not a directory: {target}")
+            return
+
+        self._workspace_root = target
+        self._display.print_success(f"Workspace root: {target}")
+
     def _handle_quit(self) -> None:
         """Save session and exit."""
         # Save token tracker state
@@ -994,6 +1064,7 @@ class ReplSession:
                 self._token_tracker, self._session,
                 auto_apply=self._auto_apply,
                 max_rounds=self._agent_rounds,
+                workspace_root=self._workspace_root,
             )
             files = list(self._queued_files) if self._queued_files else None
             self._queued_files.clear()
@@ -1049,7 +1120,10 @@ class ReplSession:
 
         parser = UnifiedParser()
         edits, legacy_blocks = parser.parse(full_text)
-        applier = FileApplier(self._config, self._display)
+        applier = FileApplier(
+            self._config, self._display,
+            project_root=self._workspace_root,
+        )
         mode = "auto" if self._auto_apply else "confirm"
 
         if edits:

@@ -748,3 +748,83 @@ class TestContextCommand:
         assert "User: 2 messages" in output
         assert "Assistant: 1 messages" in output
         assert "3 messages" in output
+
+
+class TestTargetCommand:
+    """Tests for /target command."""
+
+    def test_target_sets_workspace_root(
+        self, repl: ReplSession, tmp_path: Path, display: Display
+    ) -> None:
+        """/target <path> sets _workspace_root."""
+        target_dir = tmp_path / "my_repo"
+        target_dir.mkdir()
+        repl._handle_command(f"/target {target_dir}")
+        assert repl._workspace_root == target_dir.resolve()
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Workspace root" in output
+
+    def test_target_no_args_shows_current(
+        self, repl: ReplSession, tmp_path: Path, display: Display
+    ) -> None:
+        """/target with no args shows current workspace root."""
+        repl._workspace_root = tmp_path
+        repl._handle_command("/target")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Workspace root" in output
+
+    def test_target_no_args_no_root_shows_usage(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        """/target with no args and no root shows usage hint."""
+        repl._handle_command("/target")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "No workspace root set" in output
+
+    def test_target_invalid_path_shows_error(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        """/target with non-directory shows error."""
+        repl._handle_command("/target /nonexistent/path/that/does/not/exist")
+        assert repl._workspace_root is None
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Not a directory" in output
+
+    def test_workspace_root_passed_to_file_applier(
+        self, repl: ReplSession, tmp_path: Path
+    ) -> None:
+        """Workspace root is passed to FileApplier when applying edits."""
+        target_dir = tmp_path / "repo"
+        target_dir.mkdir()
+        (target_dir / "file.py").write_text("old\n")
+        repl._workspace_root = target_dir
+
+        # Simulate a response with a SEARCH/REPLACE block
+        response = (
+            "file.py\n"
+            "<<<<<<< SEARCH\n"
+            "old\n"
+            "=======\n"
+            "new\n"
+            ">>>>>>> REPLACE\n"
+        )
+        with patch("genai_cli.repl.stream_or_complete") as mock_stream, \
+             patch.object(repl, "_get_client", return_value=MagicMock()):
+            fake_msg = MagicMock()
+            fake_msg.tokens_consumed = 10
+            fake_msg.token_cost = 0.001
+            mock_stream.return_value = (response, fake_msg)
+            repl._auto_apply = True
+            repl._send_message("fix it")
+
+        # The file in target_dir should have been edited
+        assert "new" in (target_dir / "file.py").read_text()
+
+    def test_target_in_completer(self, repl_config: ConfigManager) -> None:
+        """/target appears in slash command completions."""
+        from genai_cli.session import SessionManager
+
+        completer = SlashCompleter(repl_config, SessionManager(repl_config))
+        doc = Document("/tar", 4)
+        results = [c.text for c in completer.get_completions(doc, CompleteEvent())]
+        assert "/target" in results

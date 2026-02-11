@@ -113,7 +113,7 @@ class TestSkillLoader:
                 assert content.body, f"Empty body in {skill_file}"
                 loaded += 1
 
-        assert loaded == 14, f"Expected 14 bundled skills, found {loaded}"
+        assert loaded == 17, f"Expected 17 bundled skills, found {loaded}"
 
     def test_invalid_yaml_frontmatter(
         self, loader: SkillLoader, tmp_path: Path

@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-11 | feat: /target command for workspace root + fix legacy path validation
+
+### Summary
+Added `/target <path>` command to set a workspace root so edits from bundled
+external repos apply to the correct directory instead of cwd. The workspace root
+is also auto-detected when using `/files` or `/bundle`. Fixed the legacy
+`ResponseParser` to reject invalid file paths (bare language names like
+`markdown`, `python`, code fence artifacts) extracted from fenced code blocks.
+
+### Files Changed
+- `src/genai_cli/repl.py` — Added `_workspace_root` attribute, `/target` command
+  (handler, dispatch, completer, help), auto-detection in `_handle_files()` and
+  `_handle_bundle()`, pass `project_root` to `FileApplier` and `AgentLoop`
+- `src/genai_cli/agent.py` — Added `workspace_root` parameter to `AgentLoop.__init__()`,
+  passed to `FileApplier`
+- `src/genai_cli/applier.py` — Added path validation in `ResponseParser.parse()`:
+  reject paths starting with `` ``` ``, paths with no `.` or `/` (bare language names)
+- `tests/test_repl.py` — 6 new tests for `/target` command and workspace root passing
+- `tests/test_search_replace.py` — 5 new tests for legacy parser path rejection
+
+### Testing Recommendations
+- `/target /repo-location` then send a message → edits apply to `/repo-location/`
+- Legacy parser no longer extracts `markdown` or `python` as file paths
+- `make test` — all tests pass
+
+---
+
 ## 2026-02-10 | fix: SEARCH/REPLACE parser extracting code fence as file path
 
 ### Summary

@@ -662,3 +662,59 @@ class TestSearchReplaceApply:
         # Should not crash even without git
         results = applier.apply_edits([edit], mode="auto")
         assert results[0].success
+
+
+# ---------------------------------------------------------------------------
+# Legacy ResponseParser Path Validation Tests
+# ---------------------------------------------------------------------------
+
+
+class TestLegacyPathValidation:
+    """Tests that ResponseParser rejects invalid paths from fenced blocks."""
+
+    def test_rejects_bare_language_name(self) -> None:
+        """```python:markdown should not extract 'markdown' as a file path."""
+        from genai_cli.applier import ResponseParser
+
+        parser = ResponseParser()
+        response = "```python:markdown\nprint('hello')\n```"
+        blocks = parser.parse(response)
+        assert len(blocks) == 0
+
+    def test_rejects_bare_word_no_dot_or_slash(self) -> None:
+        """Paths without '.' or '/' are rejected (e.g. 'javascript')."""
+        from genai_cli.applier import ResponseParser
+
+        parser = ResponseParser()
+        response = "```js:javascript\nconsole.log('hi');\n```"
+        blocks = parser.parse(response)
+        assert len(blocks) == 0
+
+    def test_rejects_code_fence_artifact(self) -> None:
+        """Paths starting with ``` are rejected."""
+        from genai_cli.applier import ResponseParser
+
+        parser = ResponseParser()
+        response = "```python:```nested\ncode\n```"
+        blocks = parser.parse(response)
+        assert len(blocks) == 0
+
+    def test_accepts_valid_path_with_dot(self) -> None:
+        """Paths like 'main.py' (with a dot) are accepted."""
+        from genai_cli.applier import ResponseParser
+
+        parser = ResponseParser()
+        response = "```python:main.py\ndef hello(): pass\n```"
+        blocks = parser.parse(response)
+        assert len(blocks) == 1
+        assert blocks[0].file_path == "main.py"
+
+    def test_accepts_valid_path_with_slash(self) -> None:
+        """Paths like 'src/utils' (with a slash) are accepted."""
+        from genai_cli.applier import ResponseParser
+
+        parser = ResponseParser()
+        response = "```python:src/utils\ndef add(a,b): return a+b\n```"
+        blocks = parser.parse(response)
+        assert len(blocks) == 1
+        assert blocks[0].file_path == "src/utils"
