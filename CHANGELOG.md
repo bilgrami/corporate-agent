@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-11 | fix: Split large bundle uploads to avoid 415 errors
+
+### Summary
+Large bundle files (~370KB+) caused 415 Unsupported Media Type errors from the
+server. The client now automatically splits bundles exceeding 200KB into smaller
+chunks before uploading. Splitting prefers `===== FILE:` boundaries; falls back
+to line boundaries when no markers are present. Upload error messages now include
+the HTTP status code and response body for easier debugging.
+
+### Files Changed
+- `src/genai_cli/client.py` — Added `_MAX_UPLOAD_BYTES` constant (200KB),
+  `_split_bundle_content()` and `_split_by_lines()` methods, updated
+  `upload_bundles()` to split large bundles into chunks before upload
+- `src/genai_cli/repl.py` — Added `httpx` import, improved error handling in
+  `_handle_files()` and `_send_message()` to show HTTP status code and response
+  body on `HTTPStatusError`
+- `tests/test_client.py` — 7 new tests for chunk splitting and upload behavior
+
+### Testing Recommendations
+- `/bundle src/**/*.py` then `/files .bundle/code.txt` with a large bundle
+- `make test` — all tests pass
+
+---
+
 ## 2026-02-11 | feat: /target command for workspace root + fix legacy path validation
 
 ### Summary

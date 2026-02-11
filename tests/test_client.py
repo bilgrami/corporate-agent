@@ -284,3 +284,109 @@ class TestGenAIClient:
     def test_close(self, client: GenAIClient) -> None:
         # Should not raise even if client not initialized
         client.close()
+
+
+class TestBundleChunking:
+    """Tests for _split_bundle_content and _split_by_lines."""
+
+    def test_small_content_returns_single_chunk(self, client: GenAIClient) -> None:
+        """Content under _MAX_UPLOAD_BYTES is returned as-is."""
+        content = "small content"
+        chunks = client._split_bundle_content(content)
+        assert chunks == [content]
+
+    def test_large_content_splits_at_file_markers(self, client: GenAIClient) -> None:
+        """Large content with ===== FILE: markers splits at those boundaries."""
+        from genai_cli.client import _MAX_UPLOAD_BYTES
+
+        # Build content with FILE: markers that exceeds the limit
+        file_block = "x" * 50_000
+        content = (
+            f"===== FILE: a.py =====\n{file_block}\n"
+            f"===== FILE: b.py =====\n{file_block}\n"
+            f"===== FILE: c.py =====\n{file_block}\n"
+            f"===== FILE: d.py =====\n{file_block}\n"
+            f"===== FILE: e.py =====\n{file_block}\n"
+        )
+        assert len(content.encode()) > _MAX_UPLOAD_BYTES
+
+        chunks = client._split_bundle_content(content)
+        assert len(chunks) > 1
+        # Each chunk should be within the limit
+        for chunk in chunks:
+            assert len(chunk.encode()) <= _MAX_UPLOAD_BYTES
+        # Reassembling should recover all FILE: markers
+        reassembled = "".join(chunks)
+        assert reassembled.count("===== FILE:") == 5
+
+    def test_large_content_without_markers_splits_by_lines(
+        self, client: GenAIClient
+    ) -> None:
+        """Large content without FILE: markers splits at line boundaries."""
+        from genai_cli.client import _MAX_UPLOAD_BYTES
+
+        lines = ["line " + str(i) for i in range(50_000)]
+        content = "\n".join(lines)
+        assert len(content.encode()) > _MAX_UPLOAD_BYTES
+
+        chunks = client._split_bundle_content(content)
+        assert len(chunks) > 1
+        for chunk in chunks:
+            assert len(chunk.encode()) <= _MAX_UPLOAD_BYTES
+
+    def test_split_by_lines(self, client: GenAIClient) -> None:
+        """_split_by_lines splits at line boundaries."""
+        from genai_cli.client import _MAX_UPLOAD_BYTES
+
+        lines = ["line " + str(i) for i in range(50_000)]
+        content = "\n".join(lines)
+        assert len(content.encode()) > _MAX_UPLOAD_BYTES
+
+        chunks = client._split_by_lines(content)
+        assert len(chunks) > 1
+        for chunk in chunks:
+            assert len(chunk.encode()) <= _MAX_UPLOAD_BYTES
+        # All lines should be preserved
+        reassembled_lines = []
+        for chunk in chunks:
+            reassembled_lines.extend(chunk.split("\n"))
+        assert len(reassembled_lines) == len(lines)
+
+    @respx.mock
+    def test_upload_bundles_splits_large_bundle(
+        self, client: GenAIClient
+    ) -> None:
+        """upload_bundles() calls upload_document multiple times for large bundles."""
+        from genai_cli.client import _MAX_UPLOAD_BYTES
+
+        route = respx.put(
+            "https://api-genai.test.com/api/v1/conversation/s1/document/upload"
+        ).mock(return_value=httpx.Response(200, json={"status": "ok"}))
+
+        file_block = "x" * 80_000
+        large_content = (
+            f"===== FILE: a.py =====\n{file_block}\n"
+            f"===== FILE: b.py =====\n{file_block}\n"
+            f"===== FILE: c.py =====\n{file_block}\n"
+        )
+        bundle = MagicMock(content=large_content)
+        results = client.upload_bundles("s1", [bundle])
+
+        # Should have made multiple upload calls
+        assert route.call_count > 1
+        assert len(results) == route.call_count
+
+    @respx.mock
+    def test_upload_bundles_small_bundle_single_upload(
+        self, client: GenAIClient
+    ) -> None:
+        """upload_bundles() uploads small bundle in a single call."""
+        route = respx.put(
+            "https://api-genai.test.com/api/v1/conversation/s1/document/upload"
+        ).mock(return_value=httpx.Response(200, json={"status": "ok"}))
+
+        bundle = MagicMock(content="small content")
+        results = client.upload_bundles("s1", [bundle])
+
+        assert route.call_count == 1
+        assert len(results) == 1

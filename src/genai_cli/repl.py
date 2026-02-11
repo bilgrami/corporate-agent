@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import httpx
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.completion import PathCompleter as _PathCompleter
@@ -439,6 +440,12 @@ class ReplSession:
         try:
             client.upload_bundles(session_id, bundles)
             self._display.print_success("Files uploaded")
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:200] if hasattr(e, "response") else ""
+            self._display.print_error(
+                f"Upload failed ({e.response.status_code}): {body}"
+            )
+            return
         except Exception as e:
             self._display.print_error(f"Upload failed: {e}")
             return
@@ -1085,6 +1092,11 @@ class ReplSession:
                     client.ensure_session(session_id, self._model_name)
                     client.upload_bundles(session_id, bundles)
                     self._display.print_success("Files uploaded")
+                except httpx.HTTPStatusError as e:
+                    body = e.response.text[:200] if hasattr(e, "response") else ""
+                    self._display.print_error(
+                        f"Upload failed ({e.response.status_code}): {body}"
+                    )
                 except Exception as e:
                     self._display.print_error(f"Upload failed: {e}")
             self._queued_files.clear()

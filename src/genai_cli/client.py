@@ -14,6 +14,9 @@ from genai_cli.mapper import ResponseMapper
 from genai_cli.models import ChatMessage
 
 
+_MAX_UPLOAD_BYTES = 200_000
+
+
 class GenAIClient:
     """Synchronous HTTP client for the corporate GenAI API."""
 
@@ -129,16 +132,62 @@ class GenAIClient:
         result: dict[str, Any] = self._handle_response(resp)
         return result
 
+    def _split_bundle_content(self, content: str) -> list[str]:
+        """Split large content into uploadable chunks."""
+        encoded = content.encode()
+        if len(encoded) <= _MAX_UPLOAD_BYTES:
+            return [content]
+
+        # Try splitting at ===== FILE: boundaries
+        marker = "===== FILE:"
+        parts = content.split(marker)
+        if len(parts) <= 1:
+            # No markers — split at line boundaries
+            return self._split_by_lines(content)
+
+        chunks: list[str] = []
+        current = parts[0]  # header before first marker
+        for part in parts[1:]:
+            candidate = current + marker + part
+            if len(candidate.encode()) > _MAX_UPLOAD_BYTES and current.strip():
+                chunks.append(current)
+                current = marker + part
+            else:
+                current = candidate
+        if current.strip():
+            chunks.append(current)
+        return chunks
+
+    def _split_by_lines(self, content: str) -> list[str]:
+        """Split content at line boundaries into chunks."""
+        lines = content.split("\n")
+        chunks: list[str] = []
+        current: list[str] = []
+        size = 0
+        for line in lines:
+            line_size = len(line.encode()) + 1
+            if size + line_size > _MAX_UPLOAD_BYTES and current:
+                chunks.append("\n".join(current))
+                current = []
+                size = 0
+            current.append(line)
+            size += line_size
+        if current:
+            chunks.append("\n".join(current))
+        return chunks
+
     def upload_bundles(
         self,
         session_id: str,
         bundles: list[Any],
     ) -> list[dict[str, Any]]:
-        """Upload multiple file bundles (one PUT per type)."""
+        """Upload multiple file bundles, splitting large ones into chunks."""
         results: list[dict[str, Any]] = []
         for bundle in bundles:
-            result = self.upload_document(session_id, bundle.content, "blob")
-            results.append(result)
+            chunks = self._split_bundle_content(bundle.content)
+            for chunk in chunks:
+                result = self.upload_document(session_id, chunk, "blob")
+                results.append(result)
         return results
 
     def get_conversation_details(self, session_id: str) -> dict[str, Any]:
