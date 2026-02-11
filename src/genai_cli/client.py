@@ -121,7 +121,7 @@ class GenAIClient:
         self,
         session_id: str,
         content: str,
-        filename: str = "blob",
+        filename: str = "blob.txt",
     ) -> dict[str, Any]:
         """PUT document upload."""
         client = self._get_client()
@@ -186,7 +186,7 @@ class GenAIClient:
         for bundle in bundles:
             chunks = self._split_bundle_content(bundle.content)
             for chunk in chunks:
-                result = self.upload_document(session_id, chunk, "blob")
+                result = self.upload_document(session_id, chunk, "blob.txt")
                 results.append(result)
         return results
 

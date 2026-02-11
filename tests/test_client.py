@@ -261,9 +261,9 @@ class TestGenAIClient:
         ).mock(return_value=httpx.Response(200, json={"status": "ok"}))
         client.upload_document("s1", "content here")
         request = route.calls[0].request
-        # The multipart body should contain filename="blob"
+        # The multipart body should contain filename="blob.txt"
         body = request.content.decode("utf-8", errors="replace")
-        assert 'filename="blob"' in body
+        assert 'filename="blob.txt"' in body
 
     @respx.mock
     def test_upload_bundles_uses_blob_filename(
@@ -279,7 +279,7 @@ class TestGenAIClient:
         assert route.call_count == 2
         for call in route.calls:
             body = call.request.content.decode("utf-8", errors="replace")
-            assert 'filename="blob"' in body
+            assert 'filename="blob.txt"' in body
 
     def test_close(self, client: GenAIClient) -> None:
         # Should not raise even if client not initialized
