@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-10 | feat: Add output filename option to REPL /bundle command
+
+### Summary
+The REPL `/bundle` command now supports `-o` / `--output` flag to specify a
+custom output filename and path. Previously it always wrote to `bundle.txt`
+in the current directory. The CLI `genai bundle --output` already had this;
+now the REPL matches.
+
+### Files Changed
+- `src/genai_cli/repl.py` — Parse `-o` / `--output` flag in `_handle_bundle`,
+  create parent directories if needed, update help text and completer
+- `tests/test_repl.py` — 3 new tests: `-o` flag, `--output` flag, subdirectory
+  creation
+
+### Testing Recommendations
+- `/bundle src/ -o myfile.txt` — creates `myfile.txt`
+- `/bundle src/` — still defaults to `bundle.txt`
+- `make test` — no regressions
+
+---
+
 ## 2026-02-10 | docs+fix: Add example.env profiles and fix auth login on macOS
 
 ### Summary

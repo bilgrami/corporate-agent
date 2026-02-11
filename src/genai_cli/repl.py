@@ -39,7 +39,7 @@ class SlashCompleter(Completer):
         "/model": "Show or switch model",
         "/models": "List all available models",
         "/files": "Queue files for next message",
-        "/bundle": "Bundle files into a single .txt file",
+        "/bundle": "Bundle files into .txt (-o name)",
         "/clear": "Clear session, start fresh",
         "/fresh": "Alias for /clear",
         "/compact": "Summarize to reduce tokens",
@@ -310,7 +310,7 @@ class ReplSession:
   /model [name]      List models or switch model
   /models            List all available models
   /files <paths>     Queue files for next message
-  /bundle <paths>    Bundle files into bundle.txt
+  /bundle <paths> [-o file.txt]  Bundle files (default: bundle.txt)
   /clear             Clear session, start fresh
   /fresh             Alias for /clear
   /compact           Summarize conversation to reduce tokens
@@ -437,15 +437,36 @@ class ReplSession:
     def _handle_bundle(self, arg: str) -> None:
         """Bundle files into a single .txt for upload."""
         if not arg:
-            self._display.print_info("Usage: /bundle <paths>  (writes bundle.txt)")
+            self._display.print_info(
+                "Usage: /bundle <paths> [-o output.txt]  (default: bundle.txt)"
+            )
             return
 
         try:
-            paths = shlex.split(arg)
+            parts = shlex.split(arg)
         except ValueError:
-            paths = arg.split()
+            parts = arg.split()
 
-        output = Path.cwd() / "bundle.txt"
+        # Parse -o / --output flag
+        output_name = "bundle.txt"
+        paths: list[str] = []
+        i = 0
+        while i < len(parts):
+            if parts[i] in ("-o", "--output") and i + 1 < len(parts):
+                output_name = parts[i + 1]
+                i += 2
+            else:
+                paths.append(parts[i])
+                i += 1
+
+        if not paths:
+            self._display.print_info(
+                "Usage: /bundle <paths> [-o output.txt]  (default: bundle.txt)"
+            )
+            return
+
+        output = Path(output_name) if "/" in output_name or "\\" in output_name else Path.cwd() / output_name
+        output.parent.mkdir(parents=True, exist_ok=True)
         file_count, total_bytes, unmatched = self._bundler.write_bundle(paths, output)
 
         if unmatched:

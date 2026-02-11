@@ -605,6 +605,54 @@ class TestBundleCommand:
         assert "/bundle" in results
 
 
+    def test_bundle_custom_output_flag(
+        self, repl: ReplSession, sample_project_dir: Path, display: Display, tmp_path: Path
+    ) -> None:
+        """/bundle <path> -o custom.txt creates named output file."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            repl._handle_command(f"/bundle {sample_project_dir / 'src'} -o custom.txt")
+            output = display._file.getvalue()  # type: ignore[union-attr]
+            assert "Bundled" in output
+            assert (tmp_path / "custom.txt").exists()
+            assert not (tmp_path / "bundle.txt").exists()
+        finally:
+            os.chdir(old_cwd)
+
+    def test_bundle_long_output_flag(
+        self, repl: ReplSession, sample_project_dir: Path, display: Display, tmp_path: Path
+    ) -> None:
+        """/bundle <path> --output name.txt works like -o."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            repl._handle_command(f"/bundle {sample_project_dir / 'src'} --output out.txt")
+            output = display._file.getvalue()  # type: ignore[union-attr]
+            assert "Bundled" in output
+            assert (tmp_path / "out.txt").exists()
+        finally:
+            os.chdir(old_cwd)
+
+    def test_bundle_output_with_subdir(
+        self, repl: ReplSession, sample_project_dir: Path, display: Display, tmp_path: Path
+    ) -> None:
+        """/bundle -o sub/out.txt creates subdirectory if needed."""
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            sub_output = tmp_path / "sub" / "out.txt"
+            repl._handle_command(f"/bundle {sample_project_dir / 'src'} -o {sub_output}")
+            output = display._file.getvalue()  # type: ignore[union-attr]
+            assert "Bundled" in output
+            assert sub_output.exists()
+        finally:
+            os.chdir(old_cwd)
+
+
 class TestUndoCommand:
     """Tests for /undo command."""
 
