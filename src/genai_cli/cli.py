@@ -173,7 +173,9 @@ def auth_login(ctx: click.Context) -> None:
     display: Display = ctx.obj["display"]
     auth_mgr = AuthManager()
 
-    token = click.prompt("Paste your Bearer token from browser DevTools", hide_input=True)
+    from prompt_toolkit import prompt as pt_prompt
+
+    token = pt_prompt("Paste your Bearer token from browser DevTools: ", is_password=True)
     api_url = click.prompt("Enter API base URL (e.g. https://api-genai.example.com)")
 
     auth_mgr.save_token(token)

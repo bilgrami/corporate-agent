@@ -80,6 +80,24 @@ genai auth verify
 
 Shows your email, token expiry, and verifies API connectivity.
 
+### Environment Variables (Alternative)
+
+Instead of `genai auth login`, you can configure via environment variables.
+Copy an example profile and fill in your values:
+
+| File | Profile | Default Model |
+|------|---------|---------------|
+| `example.env` | Corporate (all options) | gpt-5-chat-global |
+| `example.env.openai` | OpenAI | gpt-5-chat-global |
+| `example.env.anthropic` | Anthropic | claude-sonnet-4-5-global |
+| `example.env.google` | Google | gemini-2.5-pro-global |
+
+```bash
+cp example.env.anthropic ~/.genai-cli/.env
+# Edit ~/.genai-cli/.env — add your token and API URL
+genai auth verify
+```
+
 ## Interactive REPL (Primary Interface)
 
 Running `genai` with no arguments launches an interactive REPL:

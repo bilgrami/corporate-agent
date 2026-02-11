@@ -4,6 +4,44 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-10 | docs+fix: Add example.env profiles and fix auth login on macOS
+
+### Summary
+Added `example.env` with all 6 documented environment variables for the
+corporate profile, plus provider-specific profiles (`example.env.openai`,
+`example.env.anthropic`, `example.env.google`) with recommended model defaults.
+Fixed `genai auth login` being stuck on macOS when pasting bearer tokens by
+replacing `click.prompt(hide_input=True)` with `prompt_toolkit`'s
+`prompt(is_password=True)`.
+
+### Files Changed
+
+**New files (4):**
+- `example.env` — Corporate profile with all env vars documented
+- `example.env.openai` — OpenAI profile (GPT-5 default)
+- `example.env.anthropic` — Anthropic profile (Claude Sonnet 4.5 default)
+- `example.env.google` — Google profile (Gemini 2.5 Pro default)
+
+**Modified files (2):**
+- `src/genai_cli/cli.py` — Replaced `click.prompt(hide_input=True)` with
+  `prompt_toolkit.prompt(is_password=True)` for macOS paste compatibility
+- `README.md` — Added "Environment Variables (Alternative)" subsection with
+  profile table and copy instructions
+
+### Rationale
+New developers had no reference file showing available environment variables.
+The `genai auth login` command was unusable on macOS because `click.prompt`
+with `hide_input=True` uses `getpass` which breaks pasted input in macOS
+terminals. `prompt_toolkit` (already a dependency) handles paste correctly
+and shows `*` characters for visual feedback.
+
+### Testing Recommendations
+- `genai auth login` on macOS — paste a token, confirm `*` chars appear, Enter advances
+- `make test` — no regressions
+- `git status` — confirm example.env files are tracked (not ignored by .gitignore)
+
+---
+
 ## 2026-02-10 | docs: Bring all documentation current and add Quickstart
 
 ### Summary
