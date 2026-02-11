@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-10 | fix: SEARCH/REPLACE parser extracting code fence as file path
+
+### Summary
+Fixed a bug where the `SearchReplaceParser` extracted `` ```markdown `` as the
+file path when the AI wrapped SEARCH/REPLACE blocks inside markdown code fences.
+The parser now detects code fence lines and looks one line back for the actual
+file path (stripping backtick wrapping). Blocks with no valid path are skipped.
+
+### Files Changed
+- `src/genai_cli/applier.py` — Added code fence detection in `SearchReplaceParser.parse()`:
+  when the candidate path starts with `` ``` ``, look at the previous line and
+  strip backtick wrapping to find the real file path
+- `tests/test_search_replace.py` — 3 new tests: code-fence-wrapped create,
+  code-fence-wrapped edit, code-fence with no valid path (skipped)
+
+### Testing Recommendations
+- `pytest tests/test_search_replace.py -v` — all tests pass
+- `make test` — no regressions
+
+---
+
 ## 2026-02-10 | feat: Add output filename option to REPL /bundle command
 
 ### Summary

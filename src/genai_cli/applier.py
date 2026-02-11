@@ -101,6 +101,24 @@ class SearchReplaceParser:
                 and stripped != self._REPLACE_MARKER
             ):
                 file_path = stripped.strip()
+
+                # If this line is a code fence (```lang), the AI wrapped
+                # the SEARCH/REPLACE block in a markdown code block.
+                # Look one line back for the actual file path.
+                if file_path.startswith("```"):
+                    if i > 0:
+                        prev = lines[i - 1].rstrip("\n\r").strip()
+                        # Strip backtick wrapping: `path/to/file` -> path/to/file
+                        prev = prev.strip("`").strip()
+                        if prev and ("/" in prev or "." in prev):
+                            file_path = prev
+                        else:
+                            i += 1
+                            continue
+                    else:
+                        i += 1
+                        continue
+
                 original_start = i
                 i += 2  # skip path line and <<<<<<< SEARCH
 

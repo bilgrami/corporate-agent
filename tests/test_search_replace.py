@@ -316,6 +316,66 @@ class TestSearchReplaceParser:
         assert "new_code()" in edits[0].replace_content
 
 
+    def test_parse_code_fence_wrapped_block(
+        self, parser: SearchReplaceParser
+    ) -> None:
+        """When AI wraps SEARCH/REPLACE in a code fence, extract the path from the line before the fence."""
+        response = (
+            "Here is the new file:\n\n"
+            "`docs/troubleshooting.md`\n"
+            "```markdown\n"
+            "<<<<<<< SEARCH\n"
+            "=======\n"
+            "# Troubleshooting Guide\n"
+            "Common issues.\n"
+            ">>>>>>> REPLACE\n"
+            "```\n"
+        )
+        edits = parser.parse(response)
+        assert len(edits) == 1
+        assert edits[0].file_path == "docs/troubleshooting.md"
+        assert edits[0].is_create
+        assert "Troubleshooting Guide" in edits[0].replace_content
+
+    def test_parse_code_fence_wrapped_edit(
+        self, parser: SearchReplaceParser
+    ) -> None:
+        """Code fence wrapping with an edit (non-empty SEARCH)."""
+        response = (
+            "`src/main.py`\n"
+            "```python\n"
+            "<<<<<<< SEARCH\n"
+            "def old():\n"
+            "    pass\n"
+            "=======\n"
+            "def new():\n"
+            "    return True\n"
+            ">>>>>>> REPLACE\n"
+            "```\n"
+        )
+        edits = parser.parse(response)
+        assert len(edits) == 1
+        assert edits[0].file_path == "src/main.py"
+        assert "old" in edits[0].search_content
+        assert "new" in edits[0].replace_content
+
+    def test_parse_code_fence_no_valid_path_skipped(
+        self, parser: SearchReplaceParser
+    ) -> None:
+        """Code fence with no valid path on previous line is skipped."""
+        response = (
+            "Here is some text\n"
+            "```markdown\n"
+            "<<<<<<< SEARCH\n"
+            "=======\n"
+            "# Content\n"
+            ">>>>>>> REPLACE\n"
+            "```\n"
+        )
+        edits = parser.parse(response)
+        assert len(edits) == 0
+
+
 # ---------------------------------------------------------------------------
 # UnifiedParser Tests
 # ---------------------------------------------------------------------------
