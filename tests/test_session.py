@@ -20,11 +20,15 @@ def session_dir(tmp_path: Path) -> Path:
     return d
 
 
-@pytest.fixture
-def session_config(tmp_path: Path, session_dir: Path) -> ConfigManager:
+@pytest.fixture(params=["json", "sqlite", "both"])
+def session_config(
+    request: pytest.FixtureRequest, tmp_path: Path, session_dir: Path
+) -> ConfigManager:
     settings = {
         "api_base_url": "https://api.test.com",
         "session_dir": str(session_dir),
+        "session_db": str(tmp_path / "test_sessions.db"),
+        "session_backend": request.param,
         "max_saved_sessions": 5,
     }
     p = tmp_path / "settings.yaml"
@@ -34,7 +38,9 @@ def session_config(tmp_path: Path, session_dir: Path) -> ConfigManager:
 
 @pytest.fixture
 def mgr(session_config: ConfigManager) -> SessionManager:
-    return SessionManager(session_config)
+    m = SessionManager(session_config)
+    yield m
+    m.close()
 
 
 class TestSessionManager:

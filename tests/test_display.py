@@ -63,6 +63,9 @@ class TestDisplay:
         text = out.getvalue()
         assert "10,000" in text
         assert "128,000" in text
+        # Progress bar renders bar characters (━ or ─ etc.)
+        lines = text.strip().split("\n")
+        assert len(lines) >= 2  # text line + bar line
 
     def test_print_token_status_warning(self) -> None:
         out = StringIO()
@@ -143,3 +146,32 @@ class TestDisplay:
         assert "input_tokens" in text
         assert "1192796" in text
         assert "output_tokens" in text
+
+    def test_print_context_summary(self) -> None:
+        out = StringIO()
+        d = Display(file=out)
+        usage = TokenUsage(
+            consumed=4200, context_window=128000, estimated_cost=0.0126
+        )
+        d.print_context_summary(
+            prompt_name="default",
+            prompt_chars=2340,
+            prompt_preview="You are an AI coding assistant",
+            total_messages=12,
+            user_count=8,
+            user_chars=3200,
+            assistant_count=4,
+            assistant_chars=12800,
+            usage=usage,
+            model_display="GPT-5 Chat Global",
+        )
+        text = out.getvalue()
+        assert "Context Window" in text
+        assert "default" in text
+        assert "2,340 chars" in text
+        assert "12 messages" in text
+        assert "User: 8 messages" in text
+        assert "Assistant: 4 messages" in text
+        assert "4,200" in text
+        assert "$0.0126" in text
+        assert "GPT-5 Chat Global" in text

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import uuid
@@ -54,6 +55,8 @@ class SlashCompleter(Completer):
         "/prompts": "List available prompt profiles",
         "/skill": "Invoke a skill",
         "/skills": "List available skills",
+        "/undo": "Restore files from last edit",
+        "/context": "Show context window details",
         "/rewind": "Undo last N turns",
         "/export": "Export session to file or clipboard",
         "/analyze": "Analyze code dependencies",
@@ -180,6 +183,7 @@ class ReplSession:
         self._auto_apply = config.settings.auto_apply
         self._model_name = config.settings.default_model
         self._agent_rounds: int = 0
+        self._undo_stack: list[list[tuple[str, str]]] = []
         self._running = False
 
         # Session ID resolution priority:
@@ -276,6 +280,8 @@ class ReplSession:
             "/status": self._handle_status,
             "/config": lambda: self._handle_config(arg),
             "/auto-apply": lambda: self._handle_auto_apply(arg),
+            "/undo": self._handle_undo,
+            "/context": self._handle_context,
             "/agent": lambda: self._handle_agent(arg),
             "/prompt": lambda: self._handle_prompt(arg),
             "/prompts": self._handle_prompts,
@@ -315,6 +321,8 @@ class ReplSession:
   /status            Show current session status
   /config [k] [v]    View or update settings
   /auto-apply [on|off]  Toggle auto-apply mode
+  /undo              Restore files from last edit (.bak)
+  /context           Show context window details
   /agent [rounds]    Enable agent mode for next message
   /prompt [name]     Show or switch system prompt profile
   /prompts           List available prompt profiles
@@ -578,6 +586,73 @@ class ReplSession:
             self._auto_apply = not self._auto_apply
         state = "on" if self._auto_apply else "off"
         self._display.print_success(f"Auto-apply: {state}")
+
+    def _handle_undo(self) -> None:
+        """Restore files from the last edit using .bak backups."""
+        if not self._undo_stack:
+            self._display.print_warning("Nothing to undo.")
+            return
+        if not self._config.settings.create_backups:
+            self._display.print_warning(
+                "Backups are disabled (create_backups=false). Cannot undo."
+            )
+            return
+
+        entry = self._undo_stack.pop()
+        restored: list[str] = []
+        for file_path, action in entry:
+            p = Path(file_path)
+            if action == "created":
+                p.unlink(missing_ok=True)
+                restored.append(f"  Removed: {file_path}")
+            elif action == "edited":
+                bak = p.with_suffix(p.suffix + ".bak")
+                if bak.exists():
+                    shutil.copy2(str(bak), str(p))
+                    bak.unlink()
+                    restored.append(f"  Restored: {file_path}")
+
+        if restored:
+            self._display.print_success(
+                f"Undo complete ({len(restored)} file(s)):"
+            )
+            for line in restored:
+                self._display.print_info(line)
+        else:
+            self._display.print_warning("No files were restored.")
+
+    def _handle_context(self) -> None:
+        """Show context window details."""
+        # System prompt info
+        prompt_name = self._config.active_prompt_name
+        system_prompt = self._config.get_system_prompt()
+        prompt_chars = len(system_prompt)
+        prompt_preview = system_prompt[:200].replace("\n", " ").strip()
+
+        # Message breakdown
+        messages = self._session.get("messages", [])
+        user_msgs = [m for m in messages if m.get("role") == "user"]
+        asst_msgs = [m for m in messages if m.get("role") == "assistant"]
+        user_chars = sum(len(m.get("content", "")) for m in user_msgs)
+        asst_chars = sum(len(m.get("content", "")) for m in asst_msgs)
+
+        # Token and model info
+        usage = self._token_tracker.to_usage()
+        model_info = self._config.get_model(self._model_name)
+        model_display = model_info.display_name if model_info else self._model_name
+
+        self._display.print_context_summary(
+            prompt_name=prompt_name,
+            prompt_chars=prompt_chars,
+            prompt_preview=prompt_preview,
+            total_messages=len(messages),
+            user_count=len(user_msgs),
+            user_chars=user_chars,
+            assistant_count=len(asst_msgs),
+            assistant_chars=asst_chars,
+            usage=usage,
+            model_display=model_display,
+        )
 
     def _handle_agent(self, arg: str) -> None:
         """Enable agent mode for next message."""
@@ -873,10 +948,11 @@ class ReplSession:
         """Save session and exit."""
         # Save token tracker state
         self._session["token_tracker"] = self._token_tracker.to_dict()
-        path = self._session_mgr.save_session(self._session)
+        self._session_mgr.save_session(self._session)
         sid = self._session["session_id"]
         self._display.print_success(f"Session saved: {sid}")
         self._running = False
+        self._session_mgr.close()
         if self._client:
             self._client.close()
 
@@ -963,6 +1039,16 @@ class ReplSession:
                 self._display.print_success(
                     f"Applied {len(applied)} edit(s)"
                 )
+                # Track for /undo
+                undo_entry: list[tuple[str, str]] = []
+                for r in applied:
+                    bak = Path(r.file_path).with_suffix(
+                        Path(r.file_path).suffix + ".bak"
+                    )
+                    action = "edited" if bak.exists() else "created"
+                    undo_entry.append((r.file_path, action))
+                if undo_entry:
+                    self._undo_stack.append(undo_entry)
             for f in failed:
                 self._display.print_error(
                     f"Failed: {f.file_path}: {f.error_message}"

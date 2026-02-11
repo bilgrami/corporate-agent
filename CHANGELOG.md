@@ -4,6 +4,66 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-10 | feat: UX features, SQLite session storage, and future roadmap
+
+### Summary
+Added `/undo` command to restore files from .bak backups, `/context` command to
+show context window details (system prompt, message breakdown, token budget),
+enhanced token status with a visual progress bar, SQLite + JSON dual session
+storage with configurable backends, and a future roadmap section in README.
+
+### Features
+- `/undo` — Restores files from `.bak` backups created during edit application.
+  Supports both "edited" (restore from .bak) and "created" (delete new file) actions.
+- `/context` — Shows system prompt name/preview, per-role message counts with char
+  estimates, token usage, estimated cost, and model name in a rich Panel.
+- Token progress bar — Visual `ProgressBar` below the text token status line, color-coded
+  green/yellow/red to match existing thresholds.
+- SQLite session storage — `session_stores.py` with `SessionStore` protocol,
+  `JsonSessionStore`, `SqliteSessionStore`, and `CompositeSessionStore` (dual-write).
+  Configurable via `session_backend: "both" | "json" | "sqlite"` in settings.yaml.
+- Auto-migration — On first SQLite init, existing JSON session files are imported.
+- Roadmap — Documented remaining assessment items in README.md (auth, architecture,
+  engineering, community).
+
+### Files Changed
+
+**New modules (1):**
+- `src/genai_cli/session_stores.py` — SessionStore protocol + 3 implementations
+
+**New tests (1):**
+- `tests/test_session_stores.py` — 28 tests for JSON, SQLite, Composite stores + migration
+
+**Modified files (9):**
+- `src/genai_cli/models.py` — Added `session_db`, `session_backend` to AppSettings
+- `src/genai_cli/config.py` — Wired new session fields in settings property
+- `config/settings.yaml` — Added `session_db`, `session_backend` config keys
+- `src/genai_cli/session.py` — Refactored to delegate to SessionStore; added `close()`
+- `src/genai_cli/repl.py` — Added `/undo`, `/context`, undo stack tracking, close() call
+- `src/genai_cli/display.py` — Added ProgressBar to token status, `print_context_summary()`
+- `tests/test_session.py` — Parameterized across json/sqlite/both backends (15 tests x 3)
+- `tests/test_repl.py` — 7 new tests for /undo and /context
+- `tests/test_display.py` — Updated token status test, added context summary test
+- `.gitignore` — Added `*.db`
+- `README.md` — Added /undo, /context to commands table; added Roadmap section
+
+### Behavior / Compatibility Implications
+- `SessionManager.save_session()` return type changed from `Path` to `Path | None`
+- `SessionManager.close()` is a new method; called in `_handle_quit()`
+- Default `session_backend` is `"both"` (dual-write JSON + SQLite)
+- SQLite DB auto-created at `~/.genai-cli/sessions.db` on first use
+- `/undo` and `/context` are new slash commands
+- Token status now renders 2 lines (text + progress bar) instead of 1
+
+### Testing Recommendations
+- `pytest tests/test_session_stores.py -v` — 28 store tests
+- `pytest tests/test_session.py -v` — 15 tests x 3 backends = 45 test cases
+- `pytest tests/test_repl.py -v` — 7 new tests for /undo and /context
+- `pytest tests/test_display.py -v` — updated + new display tests
+- `make test` — full suite, no regressions
+
+---
+
 ## 2026-02-10 | feat: Add prompt profile switching and bundled prompt registry
 
 ### Summary

@@ -21,6 +21,8 @@ token_critical_threshold: 0.95
 
 # Session
 session_dir: "~/.genai-cli/sessions"
+session_db: "~/.genai-cli/sessions.db"
+session_backend: "both"   # "both", "json", "sqlite"
 max_saved_sessions: 50
 
 # Display

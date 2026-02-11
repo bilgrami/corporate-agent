@@ -46,6 +46,8 @@ class AppSettings:
     token_warning_threshold: float = 0.80
     token_critical_threshold: float = 0.95
     session_dir: str = "~/.genai-cli/sessions"
+    session_db: str = "~/.genai-cli/sessions.db"
+    session_backend: str = "both"  # "both", "json", "sqlite"
     max_saved_sessions: int = 50
     show_token_count: bool = True
     show_cost: bool = True

@@ -98,6 +98,8 @@ You> /quit
 | `/status` | Show session status (model, messages, tokens) |
 | `/config [k] [v]` | View or update settings |
 | `/auto-apply [on\|off]` | Toggle auto-apply mode |
+| `/undo` | Restore files from last edit (.bak) |
+| `/context` | Show context window details (prompt, messages, tokens) |
 | `/agent [rounds]` | Enable agent mode for next message |
 | `/skill <name>` | Invoke a skill |
 | `/skills` | List available skills |
@@ -472,3 +474,27 @@ Use the `repo-split` skill for guided repository splitting:
 /files src/
 /split
 ```
+
+## Roadmap
+
+### Authentication & Security
+- Browser-based OAuth/SSO login (`genai auth login --browser`)
+- Keychain-based token storage (system keyring instead of plaintext .env)
+- Content filtering for AI-generated file writes
+- Audit logging for all file modifications in agent mode
+- SECURITY.md responsible disclosure policy
+
+### Architecture
+- Plugin/extension system via Python entry points
+- LLM backend abstraction (adapter pattern for OpenAI/Anthropic/Ollama)
+- MCP (Model Context Protocol) support for tool integration
+
+### Engineering
+- Increase test coverage to 90%+
+- Structured logging with `--debug` flag
+- Pydantic/validated config models
+- Dry-run integration test in CI
+
+### Community & Distribution
+- Custom skills tutorial (`docs/creating-skills.md`)
+- PyPI publishing (`pipx install genai-cli`)

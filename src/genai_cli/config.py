@@ -200,6 +200,8 @@ class ConfigManager:
                 self._merged.get("token_critical_threshold", 0.95)
             ),
             session_dir=str(self._merged.get("session_dir", "~/.genai-cli/sessions")),
+            session_db=str(self._merged.get("session_db", "~/.genai-cli/sessions.db")),
+            session_backend=str(self._merged.get("session_backend", "both")),
             max_saved_sessions=int(self._merged.get("max_saved_sessions", 50)),
             show_token_count=bool(self._merged.get("show_token_count", True)),
             show_cost=bool(self._merged.get("show_cost", True)),

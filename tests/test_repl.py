@@ -603,3 +603,100 @@ class TestBundleCommand:
         doc = Document("/bu", 3)
         results = [c.text for c in completer.get_completions(doc, CompleteEvent())]
         assert "/bundle" in results
+
+
+class TestUndoCommand:
+    """Tests for /undo command."""
+
+    def test_undo_restores_edited_file(
+        self, repl: ReplSession, tmp_path: Path, display: Display
+    ) -> None:
+        """Undo restores file from .bak backup."""
+        target = tmp_path / "edited.py"
+        bak = tmp_path / "edited.py.bak"
+
+        # Simulate: original was backed up, then file was edited
+        bak.write_text("original content")
+        target.write_text("modified content")
+
+        repl._undo_stack.append([(str(target), "edited")])
+        repl._handle_command("/undo")
+        assert target.read_text() == "original content"
+        assert not bak.exists()
+
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Restored" in output
+
+    def test_undo_deletes_created_file(
+        self, repl: ReplSession, tmp_path: Path, display: Display
+    ) -> None:
+        """Undo removes a file that was created by AI."""
+        target = tmp_path / "new_file.py"
+        target.write_text("new content")
+
+        repl._undo_stack.append([(str(target), "created")])
+        repl._handle_command("/undo")
+        assert not target.exists()
+
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Removed" in output
+
+    def test_undo_empty_stack_warns(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        """Undo with empty stack prints warning."""
+        repl._handle_command("/undo")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Nothing to undo" in output
+
+    def test_undo_removes_bak_after_restore(
+        self, repl: ReplSession, tmp_path: Path
+    ) -> None:
+        """After restoring, the .bak file is removed."""
+        target = tmp_path / "test.py"
+        bak = tmp_path / "test.py.bak"
+        bak.write_text("backup")
+        target.write_text("current")
+
+        repl._undo_stack.append([(str(target), "edited")])
+        repl._handle_command("/undo")
+        assert not bak.exists()
+        assert target.read_text() == "backup"
+
+    def test_undo_warns_when_backups_disabled(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        """Undo warns when create_backups is disabled."""
+        repl._undo_stack.append([("/tmp/foo.py", "edited")])
+        repl._config.set_override("create_backups", False)
+        repl._handle_command("/undo")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "Backups are disabled" in output
+
+
+class TestContextCommand:
+    """Tests for /context command."""
+
+    def test_context_shows_prompt_name(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        """/context displays system prompt name."""
+        repl._handle_command("/context")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "default" in output
+        assert "Context Window" in output
+
+    def test_context_shows_message_breakdown(
+        self, repl: ReplSession, display: Display
+    ) -> None:
+        """/context displays user/assistant message counts."""
+        repl._session.setdefault("messages", []).extend([
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi there"},
+            {"role": "user", "content": "how are you"},
+        ])
+        repl._handle_command("/context")
+        output = display._file.getvalue()  # type: ignore[union-attr]
+        assert "User: 2 messages" in output
+        assert "Assistant: 1 messages" in output
+        assert "3 messages" in output

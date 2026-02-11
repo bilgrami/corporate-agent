@@ -8,6 +8,8 @@ from typing import IO, Any
 
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.progress_bar import ProgressBar
 from rich.table import Table
 
 from genai_cli.models import ModelInfo, TokenUsage
@@ -57,7 +59,7 @@ class Display:
         self._console.print(f"  {message}")
 
     def print_token_status(self, usage: TokenUsage) -> None:
-        """Print token usage with color coding."""
+        """Print token usage with color coding and progress bar."""
         ratio = usage.usage_ratio
         if ratio >= 0.95:
             color = "bold red"
@@ -71,6 +73,14 @@ class Display:
             f"  Context: [{color}]{usage.consumed:,} / "
             f"{usage.context_window:,} tokens ({pct:.0f}%)[/{color}]"
         )
+        bar_color = color.replace("bold ", "")
+        bar = ProgressBar(
+            total=max(usage.context_window, 1),
+            completed=usage.consumed,
+            width=40,
+            complete_style=bar_color,
+        )
+        self._console.print("  ", bar)
 
     def print_models_table(self, models: dict[str, ModelInfo]) -> None:
         """Print a table of available models."""
@@ -172,3 +182,38 @@ class Display:
         """Print a list of file paths."""
         for path in paths:
             self._console.print(f"    {path}")
+
+    def print_context_summary(
+        self,
+        *,
+        prompt_name: str,
+        prompt_chars: int,
+        prompt_preview: str,
+        total_messages: int,
+        user_count: int,
+        user_chars: int,
+        assistant_count: int,
+        assistant_chars: int,
+        usage: TokenUsage,
+        model_display: str,
+    ) -> None:
+        """Print context window details in a panel."""
+        pct = usage.usage_ratio * 100
+        lines = [
+            f'System prompt: "{prompt_name}" ({prompt_chars:,} chars)',
+            f'  "{prompt_preview}..."' if prompt_chars > 0 else "  (empty)",
+            "",
+            f"Conversation: {total_messages} messages",
+            f"  User: {user_count} messages (~{user_chars:,} chars)",
+            f"  Assistant: {assistant_count} messages (~{assistant_chars:,} chars)",
+            "",
+            f"Tokens: {usage.consumed:,} / {usage.context_window:,} ({pct:.1f}%)",
+            f"Estimated cost: ${usage.estimated_cost:.4f}",
+            f"Model: {model_display}",
+        ]
+        panel = Panel(
+            "\n".join(lines),
+            title="Context Window",
+            border_style="cyan",
+        )
+        self._console.print(panel)
