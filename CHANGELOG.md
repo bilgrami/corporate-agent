@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## 2026-02-10 | docs: Bring all documentation current and add Quickstart
+
+### Summary
+Updated all five documentation files to reflect the current state of the
+project after recent additions (session stores, prompt profiles, analyzer,
+git_ops, chunker, workspace, refactor_ops, mapper). Added a Quickstart
+section to README.md for new developer onboarding.
+
+### Files Changed
+- `README.md` — Added Quickstart section, `/prompt` and `/prompts` to commands
+  table, `session_backend` and `session_db` to Key Settings, updated skill
+  count (14 → 17) and test count (233 → 559+), updated session storage docs
+- `docs/Architecture.md` — Added component diagram rows for 8 new modules,
+  added module table entries, updated session.py description, updated directory
+  structure, updated data flows for /undo and session backends
+- `docs/CONTRIBUTING.md` — Updated test count, added Session Storage Backends
+  section, added Adding a New Prompt Profile recipe, added parameterized test
+  and Display capturing notes, updated skill count reference
+- `AGENTS.md` — Added 9 new module dependencies to graph, updated repl.py deps,
+  updated skills count (14 → 17) and test count (233 → 559+)
+- `docs/capabilities.md` — Added session backends, undo, context inspector,
+  updated skills count (14 → 17), updated prompt profiles description
+
+### Rationale
+Documentation was out of date after 4 feature commits that added 8 new modules,
+3 new skills, session storage backends, prompt profiles, and several new REPL
+commands. A Quickstart section was missing, requiring new developers to read
+through multiple sections before getting started.
+
+### Testing Recommendations
+- Documentation-only changes — no test impact
+- `make test` — confirm no regressions
+
+---
+
 ## 2026-02-10 | feat: UX features, SQLite session storage, and future roadmap
 
 ### Summary

@@ -17,7 +17,7 @@ application, and a skills system -- all from the terminal.
 - **src/genai_cli/** -- Main package
 - **config/** -- YAML configuration (settings, models, headers, system prompt)
 - **scripts/** -- POSIX shell scripts for make targets
-- **skills/** -- 14 bundled SKILL.md files
+- **skills/** -- 17 bundled SKILL.md files
 - **tests/** -- pytest test suite with respx HTTP mocks
 
 ## Module Dependency Graph
@@ -35,6 +35,7 @@ repl.py
   -> applier.py (response parsing)
   -> agent.py (/agent mode)
   -> skills/registry.py, skills/executor.py (/skill, /skills)
+  -> prompts/registry.py (/prompt, /prompts)
 
 agent.py
   -> client.py, config.py, display.py, streaming.py
@@ -47,7 +48,8 @@ skills/loader.py   -> (standalone: yaml + re only)
 
 config.py          -> models.py
 client.py          -> config.py, auth.py, models.py
-session.py         -> config.py, models.py
+session.py         -> config.py, models.py, session_stores.py
+session_stores.py  -> (stdlib sqlite3 + json only)
 token_tracker.py   -> config.py, models.py
 bundler.py         -> config.py, models.py
 applier.py         -> config.py, display.py
@@ -56,6 +58,14 @@ applier.py         -> config.py, display.py
 display.py         -> models.py
 streaming.py       -> client.py, config.py, models.py, display.py
 models.py          -> (no internal deps, pure data classes)
+mapper.py          -> (standalone: dict lookups only)
+analyzer.py        -> (standalone: ast + graphlib only)
+git_ops.py         -> (standalone: subprocess only)
+chunker.py         -> analyzer.py, bundler.py
+workspace.py       -> analyzer.py, git_ops.py, config.py, display.py
+refactor_ops.py    -> analyzer.py, git_ops.py, applier.py, config.py, display.py
+prompts/registry.py -> prompts/loader.py, config.py
+prompts/loader.py   -> (standalone: yaml + re only)
 ```
 
 ## Conventions
@@ -72,7 +82,7 @@ models.py          -> (no internal deps, pure data classes)
 - `make test` runs pytest with coverage
 - >80% coverage target per module
 - Every source module has a corresponding `tests/test_<module>.py`
-- 233 tests currently passing
+- 559+ tests currently passing
 
 ### Test Fixtures (tests/conftest.py)
 

@@ -34,7 +34,7 @@ pytest tests/test_cli.py -v                  # Single test file
 pytest tests/test_cli.py::TestCLI::test_help # Single test
 ```
 
-Currently: 233 tests, 81% overall coverage. Target: >80% per module.
+Currently: 559+ tests, 81% overall coverage. Target: >80% per module.
 
 ## Linting and Formatting
 
@@ -90,6 +90,24 @@ session after upload.
   `exclude_patterns`
 - Binary files are auto-detected and excluded
 
+## Session Storage Backends
+
+Session data can be stored using three backends, configured via
+`session_backend` in `settings.yaml`:
+
+| Backend | Description |
+|---------|-------------|
+| `json` | JSON files in `~/.genai-cli/sessions/` (original) |
+| `sqlite` | SQLite database at `~/.genai-cli/sessions.db` |
+| `both` | Dual-write to both JSON and SQLite (default) |
+
+The `SessionStore` protocol is defined in `src/genai_cli/session_stores.py`.
+`SessionManager` in `session.py` delegates all storage operations to the
+configured backend.
+
+Tests in `test_session.py` are parameterized across all 3 backends using
+`@pytest.fixture(params=["json", "sqlite", "both"])`.
+
 ## Adding Features
 
 ### Adding a New CLI Command
@@ -106,7 +124,28 @@ session after upload.
 1. Create `skills/<name>/SKILL.md` with YAML frontmatter
 2. Verify with `genai skill list` and `genai skill invoke <name> --dry-run`
 3. Add parse test in `tests/test_skill_loader.py`
-4. Update the skill count in `tests/test_skill_registry.py::test_discovers_all_14_skills`
+4. Update the skill count in `tests/test_skill_registry.py::test_discovers_all_17_skills`
+
+### Adding a New Prompt Profile
+
+1. Create `prompts/<name>/PROMPT.md` with YAML frontmatter:
+   ```markdown
+   ---
+   name: my-profile
+   description: >
+     One-line description of the prompt's purpose.
+   metadata:
+     author: your-name
+     version: "1.0"
+     category: development
+   ---
+
+   # Profile Title
+
+   System prompt instructions go here in markdown.
+   ```
+2. Verify with `genai prompt list` (should show new profile)
+3. Add test for prompt count in `tests/test_prompt_loader.py`
 
 ### Adding a New Config Setting
 
@@ -131,6 +170,12 @@ session after upload.
 - **Fixtures**: Shared fixtures are defined in `tests/conftest.py`.
 
 Each source module should have a corresponding `tests/test_<module>.py`.
+
+- **Parameterized session tests**: `test_session.py` uses
+  `@pytest.fixture(params=["json", "sqlite", "both"])` to run every session
+  test against all 3 storage backends.
+- **Display capturing**: `Display(file=StringIO())` now captures progress bar
+  output (token status renders 2+ lines: text + progress bar).
 
 ## Applier Architecture
 

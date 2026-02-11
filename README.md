@@ -19,6 +19,36 @@ make setup
 This creates a virtual environment, installs all dependencies, and makes the
 `genai` command available.
 
+## Quickstart
+
+Get up and running in 3 steps:
+
+1. **Install:** `make setup && source .venv/bin/activate`
+2. **Authenticate:** `genai auth login` (paste your bearer token from the web UI)
+3. **Chat:** `genai`
+
+```
+genai
+  Corporate AI CLI v0.1.0 | Model: GPT-5
+You> /files src/
+  ✓ Queued 3 code files (~450 tokens)
+You> find and fix any bugs
+Assistant> I found a potential issue...
+  Apply changes? [Y]es / [n]o / [d]iff / [a]ll: y
+  ✓ Applied 1 edit(s)
+You> /undo
+  ✓ Undo complete (1 file(s)):
+    Restored: src/main.py
+You> /context
+  ┌─ Context Window ─────────────────────┐
+  │ System prompt: "default" (2,340 chars)│
+  │ Conversation: 4 messages              │
+  │ Tokens: 890 / 128,000 (0.7%)         │
+  └───────────────────────────────────────┘
+You> /quit
+  ✓ Session saved
+```
+
 ## Authentication
 
 ### 1. Get Your Token
@@ -106,6 +136,8 @@ You> /quit
 | `/analyze <paths>` | Analyze code dependencies |
 | `/workspace <cmd>` | Manage multi-repo workspaces (add, remove, list, switch) |
 | `/split` | Start repo-split workflow |
+| `/prompt [name]` | Switch system prompt profile |
+| `/prompts` | List available prompt profiles |
 | `/quit` | Save session and exit |
 
 ## One-Shot Commands
@@ -142,7 +174,7 @@ genai skill list       # CLI
 /skills                # REPL
 ```
 
-### Bundled Skills (14)
+### Bundled Skills (17)
 
 | Skill | Description |
 |-------|-------------|
@@ -261,7 +293,9 @@ genai resume <session_id>
 /compact                     # in REPL
 ```
 
-Sessions are stored in `~/.genai-cli/sessions/` as JSON files.
+Sessions are stored using a configurable backend (see `session_backend` in
+Configuration). The default `"both"` mode dual-writes to JSON files
+(`~/.genai-cli/sessions/`) and an SQLite database (`~/.genai-cli/sessions.db`).
 
 ## Token Tracking
 
@@ -331,12 +365,14 @@ Settings are loaded with 5-level precedence (highest first):
 | `token_warning_threshold` | `0.80` | Yellow warning at 80% |
 | `token_critical_threshold` | `0.95` | Red warning at 95% |
 | `show_cost` | `true` | Show estimated costs |
+| `session_backend` | `both` | Session storage: `json`, `sqlite`, or `both` |
+| `session_db` | `~/.genai-cli/sessions.db` | SQLite database path for session storage |
 
 ## Development
 
 ```bash
 make setup    # Create venv, install deps
-make test     # Run tests with coverage (233 tests, 81% coverage)
+make test     # Run tests with coverage (559+ tests, 81% coverage)
 make lint     # Run ruff + mypy
 make format   # Auto-format code
 make clean    # Remove build artifacts

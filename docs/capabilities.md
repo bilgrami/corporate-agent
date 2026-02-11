@@ -23,8 +23,11 @@ platform.
 - **Agent mode**: Multi-round conversations with automatic code changes
 - **Session persistence**: Save, resume, and export conversations
 - **Token tracking**: Real-time usage monitoring with color-coded warnings
-- **Skills system**: Pre-built AI workflows for common tasks (14 bundled)
-- **Prompt profiles**: Switchable system prompts for different workflows
+- **Skills system**: Pre-built AI workflows for common tasks (17 bundled)
+- **Prompt profiles**: 10 bundled system prompts for different workflows
+- **Session backends**: Configurable JSON, SQLite, or dual-write storage
+- **Undo**: Restore files from .bak backups after AI edits (`/undo`)
+- **Context inspector**: View system prompt, message breakdown, token budget (`/context`)
 
 ### Code Analysis & Refactoring
 - **Dependency analysis**: AST-based import graph with cycle detection

@@ -34,6 +34,21 @@
 | skills/loader.py |     |skills/registry.py|     |skills/executor.py|
 | (SkillLoader)    |     | (SkillRegistry)  |     | (SkillExecutor)  |
 +------------------+     +------------------+     +------------------+
+
++-------------------+    +---------------------+    +-------------------+
+| session_stores.py |    | prompts/registry.py |    |   analyzer.py     |
+| (JSON+SQLite)     |    |  (PromptRegistry)   |    | (DependencyAnalyzer)|
++-------------------+    +---------------------+    +-------------------+
+
++-------------------+    +-------------------+    +-------------------+
+|   git_ops.py      |    |   chunker.py      |    |   workspace.py    |
+| (GitOperations)   |    | (ContextChunker)  |    |(WorkspaceManager) |
++-------------------+    +-------------------+    +-------------------+
+
++-------------------+    +-------------------+
+| refactor_ops.py   |    |    mapper.py      |
+| (RefactorEngine)  |    | (ResponseMapper)  |
++-------------------+    +-------------------+
 ```
 
 ## Module Responsibilities
@@ -47,7 +62,7 @@
 | `streaming.py` | StreamHandler | SSE parsing, token yielding, fallback to non-streaming |
 | `display.py` | Display | Rich console output: markdown, tables, diffs, spinners, colors |
 | `bundler.py` | FileBundler | File discovery, classification by type, bundling with markers |
-| `session.py` | SessionManager | Create/save/load/list/compact sessions as JSON |
+| `session.py` | SessionManager | Session management; delegates to SessionStore backends |
 | `token_tracker.py` | TokenTracker | Track consumed tokens, thresholds, model switching |
 | `applier.py` | SearchReplaceParser, UnifiedParser, ResponseParser, FileApplier | Parse SEARCH/REPLACE blocks (primary) + 3 legacy formats (fallback), validate paths, apply with safety |
 | `agent.py` | AgentLoop | Multi-round: upload, prompt, parse, apply, repeat |
@@ -56,6 +71,15 @@
 | `skills/executor.py` | SkillExecutor | Assemble prompt, run AgentLoop with skill context |
 | `cli.py` | Click commands | CLI entry point, all subcommands |
 | `repl.py` | ReplSession | Interactive REPL with slash commands |
+| `session_stores.py` | SessionStore, JsonSessionStore, SqliteSessionStore, CompositeSessionStore | SessionStore protocol with JSON, SQLite, and dual-write backends |
+| `mapper.py` | ResponseMapper | YAML-driven API field name translation |
+| `analyzer.py` | DependencyAnalyzer | AST-based import graph, cycle detection, clustering |
+| `git_ops.py` | GitOperations | Safe git CLI wrapper (init, add, commit, branch, checkpoint, rollback) |
+| `chunker.py` | ContextChunker | Smart file prioritization and bin-packing for context windows |
+| `workspace.py` | WorkspaceManager | Multi-repo tracking, cross-repo file moves |
+| `refactor_ops.py` | RefactorEngine | Module/symbol moves with automatic import rewriting |
+| `prompts/registry.py` | PromptRegistry | 3-location prompt discovery (project > user > bundled) |
+| `prompts/loader.py` | PromptLoader | YAML frontmatter parsing for PROMPT.md files |
 
 ## Data Flows
 
@@ -87,7 +111,8 @@ User runs: genai (no subcommand)
 5. Chat messages -> GenAIClient -> stream -> display
 6. Responses scanned for code blocks -> apply if found
 7. Token usage tracked and displayed after each message
-8. /quit saves session to ~/.genai-cli/sessions/<id>.json
+8. /undo restores files from .bak backups; /context shows token budget
+9. /quit saves session to configured backend (JSON, SQLite, or both)
 ```
 
 ### Skill Execution
@@ -157,6 +182,7 @@ corporate-agent/
     models.yaml            # Model registry (11 models)
     headers.yaml           # Default HTTP headers
     system_prompt.yaml     # System prompt template
+    api_format.yaml        # API field mappings and endpoint config
   docs/
     PRD.md                 # Product requirements
     Architecture.md        # This file
@@ -168,18 +194,24 @@ corporate-agent/
     review/, fix/, refactor/, explain/, test-gen/, doc-gen/,
     commit-msg/, security-audit/, systematic-debugging/,
     test-driven-development/, writing-plans/, executing-plans/,
-    requesting-code-review/, brainstorming/
+    requesting-code-review/, brainstorming/,
+    repo-split/, dependency-map/, migrate-module/
   src/genai_cli/
     __init__.py, __main__.py, models.py, config.py, auth.py,
     client.py, streaming.py, display.py, cli.py, bundler.py,
-    repl.py, session.py, token_tracker.py, applier.py, agent.py,
-    skills/__init__.py, skills/loader.py, skills/registry.py, skills/executor.py
+    repl.py, session.py, session_stores.py, token_tracker.py,
+    applier.py, agent.py, mapper.py, analyzer.py, git_ops.py,
+    chunker.py, workspace.py, refactor_ops.py,
+    skills/__init__.py, skills/loader.py, skills/registry.py, skills/executor.py,
+    prompts/__init__.py, prompts/loader.py, prompts/registry.py
   tests/
     conftest.py, test_config.py, test_auth.py, test_client.py,
     test_display.py, test_cli.py, test_bundler.py, test_streaming.py,
-    test_token_tracker.py, test_session.py, test_repl.py,
-    test_applier.py, test_agent.py, test_skill_loader.py,
-    test_skill_registry.py, test_skill_executor.py
+    test_token_tracker.py, test_session.py, test_session_stores.py,
+    test_repl.py, test_applier.py, test_agent.py,
+    test_skill_loader.py, test_skill_registry.py, test_skill_executor.py,
+    test_analyzer.py, test_git_ops.py, test_chunker.py,
+    test_workspace.py, test_refactor_ops.py
   Makefile
   pyproject.toml
   README.md
