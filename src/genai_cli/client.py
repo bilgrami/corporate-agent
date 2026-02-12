@@ -204,6 +204,7 @@ class GenAIClient:
         message: str,
         model: str,
         session_id: str | None = None,
+        premium: bool = False,
     ) -> httpx.Response:
         """Two-step flow: create session entry, then stream the response."""
         client = self._get_client()
@@ -216,7 +217,10 @@ class GenAIClient:
 
         # Step 2: Stream from the stream endpoint
         content_type = self._mapper.endpoint_content_type("stream")
-        payload = self._mapper.build_stream_payload(message=message, model_name=model)
+        payload_kwargs: dict[str, str] = {"message": message, "model_name": model}
+        if premium:
+            payload_kwargs["premium"] = "true"
+        payload = self._mapper.build_stream_payload(**payload_kwargs)
 
         if content_type == "multipart/form-data":
             resp = client.post(

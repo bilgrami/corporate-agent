@@ -89,6 +89,29 @@ models:
     supports_streaming: true
     supports_file_upload: true
 
+  claude-opus-4-global:
+    display_name: "Claude Opus 4"
+    provider: "anthropic"
+    tier: "full"
+    context_window: 200000
+    max_output_tokens: 32768
+    cost_per_1k_input: 0.015
+    cost_per_1k_output: 0.075
+    supports_streaming: true
+    supports_file_upload: true
+
+  claude-sonnet-4-5-premium-global:
+    display_name: "Claude Sonnet 4.5 Premium"
+    provider: "anthropic"
+    tier: "full"
+    context_window: 200000
+    max_output_tokens: 16384
+    cost_per_1k_input: 0.003
+    cost_per_1k_output: 0.015
+    supports_streaming: true
+    supports_file_upload: true
+    premium: true
+
   gemini-2.5-pro-global:
     display_name: "Gemini 2.5 Pro"
     provider: "google"

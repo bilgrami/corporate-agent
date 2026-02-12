@@ -133,9 +133,12 @@ def stream_or_complete(
     a ChatMessage from the final chunk's metadata (tokens, cost, session_id).
     Falls back to complete response on error.
     """
+    model_info = config.get_model(model)
+    premium = model_info.premium if model_info else False
+
     if use_streaming:
         try:
-            resp = client.stream_chat(message, model, session_id)
+            resp = client.stream_chat(message, model, session_id, premium=premium)
             handler = StreamHandler(config)
             mapper = config.mapper
 
@@ -171,7 +174,7 @@ def stream_or_complete(
 
     # Fallback: two-step create + stream, parsed as a complete response
     try:
-        resp = client.stream_chat(message, model, session_id)
+        resp = client.stream_chat(message, model, session_id, premium=premium)
         handler = StreamHandler(config)
         mapper = config.mapper
 

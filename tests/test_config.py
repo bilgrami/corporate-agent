@@ -70,7 +70,7 @@ class TestConfigManager:
 
     def test_get_all_models(self, mock_config: ConfigManager) -> None:
         models = mock_config.get_all_models()
-        assert len(models) == 11
+        assert len(models) == 13
         assert "gpt-5-chat-global" in models
         assert "claude-sonnet-4-5-global" in models
         assert "gemini-2.5-pro-global" in models
@@ -145,6 +145,20 @@ class TestConfigManager:
         # Should fall back to the original system prompt
         prompt = mock_config.get_system_prompt()
         assert "AI coding assistant" in prompt
+
+    def test_premium_flag_loading(self, mock_config: ConfigManager) -> None:
+        """Verify premium=False for regular models and True for premium model."""
+        regular = mock_config.get_model("claude-sonnet-4-5-global")
+        assert regular is not None
+        assert regular.premium is False
+
+        premium = mock_config.get_model("claude-sonnet-4-5-premium-global")
+        assert premium is not None
+        assert premium.premium is True
+
+        opus = mock_config.get_model("claude-opus-4-global")
+        assert opus is not None
+        assert opus.premium is False
 
     def test_get_system_prompt_without_active(self, mock_config: ConfigManager) -> None:
         """Backward compat: no active prompt set returns original system prompt."""

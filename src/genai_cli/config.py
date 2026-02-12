@@ -134,6 +134,7 @@ class ConfigManager:
                 cost_per_1k_output=info.get("cost_per_1k_output", 0.0),
                 supports_streaming=info.get("supports_streaming", True),
                 supports_file_upload=info.get("supports_file_upload", True),
+                premium=info.get("premium", False),
             )
 
         # Load headers

@@ -20,6 +20,7 @@ class ModelInfo:
     cost_per_1k_output: float
     supports_streaming: bool = True
     supports_file_upload: bool = True
+    premium: bool = False
 
 
 @dataclass

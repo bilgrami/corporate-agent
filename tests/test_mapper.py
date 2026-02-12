@@ -299,6 +299,13 @@ class TestBuildStreamPayload:
             "premium": "false",
         }
 
+    def test_premium_override(self, mapper: ResponseMapper) -> None:
+        payload = mapper.build_stream_payload(
+            message="hello", model_name="gpt-5", premium="true"
+        )
+        assert payload["premium"] == "true"
+        assert payload["user_input"] == "hello"
+
     def test_no_config(self) -> None:
         m = ResponseMapper({})
         payload = m.build_stream_payload(message="hi")
